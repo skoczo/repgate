@@ -1,0 +1,15 @@
+{
+  "name": "repgate-go",
+  "image": "mcr.microsoft.com/devcontainers/go:1.24-bookworm",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.Go",
+        "ms-azuretools.vscode-docker",
+        "github.vscode-github-actions",
+        "redhat.vscode-yaml"
+      ]
+    }
+  },
+  "postCreateCommand": "go version"
+}
