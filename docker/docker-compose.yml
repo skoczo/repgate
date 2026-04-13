@@ -1,0 +1,25 @@
+services:
+  repgate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: repgate
+    expose:
+      - "8080"
+
+  backend:
+    image: traefik/whoami:latest
+    container_name: backend
+    expose:
+      - "80"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    depends_on:
+      - repgate
+      - backend
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
