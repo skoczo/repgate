@@ -15,7 +15,7 @@ SQL-based database initialization and migrations
 
 Dev Container setup for a reproducible VS Code development environment
 
-        # Common development commands
+
 ## Requirements
 Go 1.25 or newer if using the latest modernc.org/sqlite, because recent releases of that driver require Go 1.25+.
 
