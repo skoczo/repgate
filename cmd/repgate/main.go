@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/api"
+	"github.com/skoczo/repgate/internal/storage"
 )
 
 func main() {
@@ -14,6 +15,21 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
+
+	db, err := storage.OpenSQLiteDB("data/repgate.db")
+	if err != nil {
+		slog.Error("Failed to open database", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	if err := storage.RunMigrations(db, "db/migrations/001_init.sql"); err != nil {
+		slog.Error("Failed to run migrations", "error", err)
+		os.Exit(1)
+	}
+
+	ipRepo := storage.NewIPRepository(db)
+	_ = ipRepo // Placeholder to avoid unused variable error
 
 	slog.Info("Starting IP Auth Server")
 
