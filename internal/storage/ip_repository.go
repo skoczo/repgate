@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -17,7 +16,7 @@ func NewIPRepository(db *sql.DB) *IPRepository {
 	return &IPRepository{db: db}
 }
 
-func (r *IPRepository) Save(ctx context.Context, record *model.IPRecord) error {
+func (r *IPRepository) Save(record *model.IPRecord) error {
 	query := `
 	INSERT INTO ip_records (ip, status, score, source, created_at, updated_at)
 	VALUES (?, ?, ?, ?, ?, ?)
@@ -27,7 +26,7 @@ func (r *IPRepository) Save(ctx context.Context, record *model.IPRecord) error {
 		source=excluded.source,
 		updated_at=excluded.updated_at
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.Exec(query,
 		record.IP,
 		record.Status,
 		record.Score,
@@ -41,9 +40,9 @@ func (r *IPRepository) Save(ctx context.Context, record *model.IPRecord) error {
 	return nil
 }
 
-func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord, error) {
+func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 	query := `SELECT ip, status, score, source, created_at, updated_at FROM ip_records WHERE ip = ?`
-	row := r.db.QueryRowContext(ctx, query, ip)
+	row := r.db.QueryRow(query, ip)
 
 	var record model.IPRecord
 	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CreatedAt, &record.UpdatedAt); err != nil {
@@ -55,13 +54,13 @@ func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord,
 	return &record, nil
 }
 
-func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) error {
+func (r *IPRepository) Update(record *model.IPRecord) error {
 	query := `
 	UPDATE ip_records
 	SET status = ?, score = ?, source = ?, updated_at = ?
 	WHERE ip = ?
 	`
-	_, err := r.db.ExecContext(ctx, query,
+	_, err := r.db.Exec(query,
 		record.Status,
 		record.Score,
 		record.Source,
@@ -74,19 +73,19 @@ func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) error
 	return nil
 }
 
-func (r *IPRepository) Delete(ctx context.Context, ip string) error {
+func (r *IPRepository) Delete(ip string) error {
 	query := `DELETE FROM ip_records WHERE ip = ?`
-	_, err := r.db.ExecContext(ctx, query, ip)
+	_, err := r.db.Exec(query, ip)
 	if err != nil {
 		return fmt.Errorf("failed to delete IP record: %w", err)
 	}
 	return nil
 }
 
-func (r *IPRepository) DeleteExpired(ctx context.Context, expiration time.Duration) error {
+func (r *IPRepository) DeleteExpired(expiration time.Duration) error {
 	query := `DELETE FROM ip_records WHERE updated_at < ?`
 	expirationTime := time.Now().Add(-expiration)
-	_, err := r.db.ExecContext(ctx, query, expirationTime)
+	_, err := r.db.Exec(query, expirationTime)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired IP records: %w", err)
 	}
