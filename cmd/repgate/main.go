@@ -17,6 +17,9 @@ func main() {
 	setLogger()
 	db := createDBAndRunDBMigrations()
 
+	// Ensure the database connection is closed when the application exits
+	defer db.Close()
+
 	cfg, err := config.LoadConfig("config.yaml")
 	if err != nil {
 		slog.Error("Failed to load configuration", "error", err)
@@ -71,8 +74,6 @@ func createDBAndRunDBMigrations() *sql.DB {
 		slog.Error("Failed to open database", "error", err)
 		os.Exit(1)
 	}
-	// Ensure the database connection is closed when the application exits
-	defer db.Close()
 
 	if err := storage.RunMigrations(db, "db/migrations/001_init.sql"); err != nil {
 		slog.Error("Failed to run migrations", "error", err)

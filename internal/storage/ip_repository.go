@@ -18,13 +18,14 @@ func NewIPRepository(db *sql.DB) *IPRepository {
 
 func (r *IPRepository) Save(record *model.IPRecord) error {
 	query := `
-	INSERT INTO ip_records (ip, status, score, source, created_at, updated_at)
+	INSERT INTO ip_records (ip, status, score, source, checked_at, expires_at)
 	VALUES (?, ?, ?, ?, ?, ?)
 	ON CONFLICT(ip) DO UPDATE SET
 		status=excluded.status,
 		score=excluded.score,
 		source=excluded.source,
-		updated_at=excluded.updated_at
+		checked_at=excluded.checked_at,
+		expires_at=excluded.expires_at
 	`
 	_, err := r.db.Exec(query,
 		record.IP,
@@ -41,11 +42,11 @@ func (r *IPRepository) Save(record *model.IPRecord) error {
 }
 
 func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
-	query := `SELECT ip, status, score, source, created_at, updated_at FROM ip_records WHERE ip = ?`
+	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ?`
 	row := r.db.QueryRow(query, ip)
 
 	var record model.IPRecord
-	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CreatedAt, &record.UpdatedAt); err != nil {
+	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Not found
 		}
@@ -57,7 +58,7 @@ func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 func (r *IPRepository) Update(record *model.IPRecord) error {
 	query := `
 	UPDATE ip_records
-	SET status = ?, score = ?, source = ?, updated_at = ?
+	SET status = ?, score = ?, source = ?, checked_at = ?, expires_at = ?
 	WHERE ip = ?
 	`
 	_, err := r.db.Exec(query,
@@ -65,6 +66,7 @@ func (r *IPRepository) Update(record *model.IPRecord) error {
 		record.Score,
 		record.Source,
 		time.Now(),
+		time.Now().Add(24*time.Hour), // Set expiration to 24 hours from now
 		record.IP,
 	)
 	if err != nil {

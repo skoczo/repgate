@@ -7,6 +7,6 @@ type IPRecord struct {
 	Status    string
 	Score     int
 	Source    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	CheckedAt time.Time
+	ExpiresAt time.Time
 }
