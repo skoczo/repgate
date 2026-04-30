@@ -5,40 +5,17 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/model"
 )
 
 type IPRepository struct {
-	db *sql.DB
+	db             *sql.DB
+	expirationTime time.Duration
 }
 
-func NewIPRepository(db *sql.DB) *IPRepository {
-	return &IPRepository{db: db}
-}
-
-func (r *IPRepository) Save(record *model.IPRecord) error {
-	query := `
-	INSERT INTO ip_records (ip, status, score, source, checked_at, expires_at)
-	VALUES (?, ?, ?, ?, ?, ?)
-	ON CONFLICT(ip) DO UPDATE SET
-		status=excluded.status,
-		score=excluded.score,
-		source=excluded.source,
-		checked_at=excluded.checked_at,
-		expires_at=excluded.expires_at
-	`
-	_, err := r.db.Exec(query,
-		record.IP,
-		record.Status,
-		record.Score,
-		record.Source,
-		time.Now(),
-		time.Now(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save IP record: %w", err)
-	}
-	return nil
+func NewIPRepository(db *sql.DB, cfg *config.Config) *IPRepository {
+	return &IPRepository{db: db, expirationTime: cfg.AbuseIPDB.ExpirationTime}
 }
 
 func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
@@ -55,22 +32,21 @@ func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 	return &record, nil
 }
 
+// update method should be used for saving new records and updating existing records
 func (r *IPRepository) Update(record *model.IPRecord) error {
 	query := `
-	UPDATE ip_records
-	SET status = ?, score = ?, source = ?, checked_at = ?, expires_at = ?
-	WHERE ip = ?
+	INSERT INTO ip_records
+	VALUES (?, ?, ?, ?, ?, ?)
+	ON CONFLICT(ip) DO UPDATE SET
+		status=excluded.status,
+		score=excluded.score,
+		source=excluded.source,
+		checked_at=excluded.checked_at,
+		expires_at=excluded.expires_at
 	`
-	_, err := r.db.Exec(query,
-		record.Status,
-		record.Score,
-		record.Source,
-		time.Now(),
-		time.Now().Add(24*time.Hour), // Set expiration to 24 hours from now
-		record.IP,
-	)
+	_, err := r.db.Exec(query, record.IP, record.Status, record.Score, record.Source, time.Now(), time.Now().Add(r.expirationTime))
 	if err != nil {
-		return fmt.Errorf("failed to update IP record: %w", err)
+		return fmt.Errorf("failed to save IP record: %w", err)
 	}
 	return nil
 }

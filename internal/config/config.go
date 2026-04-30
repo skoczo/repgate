@@ -2,14 +2,17 @@ package config
 
 import (
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
 	AbuseIPDB struct {
-		Enabled bool   `yaml:"enabled"`
-		APIKey  string `yaml:"api_key"`
+		Enabled                  bool          `yaml:"enabled"`
+		APIKey                   string        `yaml:"api_key"`
+		ExpirationTime           time.Duration `yaml:"expiration_time"`
+		ConfidenceScoreThreshold int           `yaml:"confidence_score_threshold"`
 	} `yaml:"AbuseIPDB"`
 }
 

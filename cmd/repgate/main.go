@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/api"
 	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/storage"
@@ -27,7 +28,7 @@ func main() {
 	}
 
 	// build threat sources based on config
-	repo := storage.NewIPRepository(db)
+	repo := storage.NewIPRepository(db, cfg)
 	threatSources := buildThreadSources(cfg, repo)
 
 	slog.Info("Configuration loaded successfully", "AbuseIPDBEnabled", cfg.AbuseIPDB.Enabled)
@@ -56,6 +57,10 @@ func buildThreadSources(cfg *config.Config, repo *storage.IPRepository) []threat
 		sources = append(sources, &threatcheck.AbuseIPDBClient{
 			APIKey: cfg.AbuseIPDB.APIKey,
 			Repo:   *repo,
+			Client: &abuseipdb.AbuseIPDBRestClient{
+				APIKey: cfg.AbuseIPDB.APIKey,
+			},
+			Config: cfg,
 		})
 	}
 	return sources

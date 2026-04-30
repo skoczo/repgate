@@ -11,6 +11,13 @@ import (
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
+// contract status codes for the API
+const (
+	StatusOK                  = http.StatusOK
+	StatusForbidden           = http.StatusForbidden
+	StatusInternalServerError = http.StatusInternalServerError
+)
+
 type Handler struct {
 	threatSources []threatcheck.ThreatSource
 }
@@ -48,14 +55,23 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Info("checking threat source", "source", source.Name())
 		result, err := source.CheckIP(r.Header.Get("X-Client-IP"))
+
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err)
-			continue
+			h.sentResponse(w, StatusInternalServerError, err.Error())
+			return
 		}
 		slog.Info("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
+		if result.IsThreat {
+			h.sentResponse(w, StatusForbidden, "IP is a threat")
+			return
+		} else {
+			h.sentResponse(w, StatusOK, "IP is not a threat")
+			return
+		}
 	}
 
-	h.sentResponse(w, http.StatusOK, map[string]any{})
+	h.sentResponse(w, StatusOK, "IP is not a threat")
 }
 
 func (h *Handler) sentResponse(w http.ResponseWriter, status int, data any) {
