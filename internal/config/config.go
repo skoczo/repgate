@@ -8,6 +8,8 @@ import (
 )
 
 type Config struct {
+	LogLevel  string `yaml:"log_level"`
+	FailOpen  bool   `yaml:"fail_open"`
 	AbuseIPDB struct {
 		Enabled                  bool          `yaml:"enabled"`
 		APIKey                   string        `yaml:"api_key"`

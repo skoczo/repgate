@@ -20,10 +20,11 @@ const (
 
 type Handler struct {
 	threatSources []threatcheck.ThreatSource
+	failOpen      bool
 }
 
-func NewRouter(threatSources []threatcheck.ThreatSource) http.Handler {
-	h := &Handler{threatSources: threatSources}
+func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool) http.Handler {
+	h := &Handler{threatSources: threatSources, failOpen: failOpen}
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -37,9 +38,7 @@ func NewRouter(threatSources []threatcheck.ThreatSource) http.Handler {
 }
 
 func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
-	// start := time.Now()
-
-	slog.Info("request received",
+	slog.Debug("request received",
 		slog.String("method", r.Method),
 		slog.String("path", r.URL.Path),
 		slog.String("remote_addr", r.RemoteAddr),
@@ -49,24 +48,21 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 		slog.String("host", r.Host))
 
 	for _, source := range h.threatSources {
-		if !source.Enabled() {
-			slog.Info("threat source is disabled, skipping", "source", source.Name())
-			continue
-		}
-		slog.Info("checking threat source", "source", source.Name())
+		slog.Debug("checking threat source", "source", source.Name())
 		result, err := source.CheckIP(r.Header.Get("X-Client-IP"))
 
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err)
+			if h.failOpen {
+				h.sentResponse(w, StatusOK, "Source is not available")
+				return
+			}
 			h.sentResponse(w, StatusInternalServerError, err.Error())
 			return
 		}
-		slog.Info("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
+		slog.Debug("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
 		if result.IsThreat {
 			h.sentResponse(w, StatusForbidden, "IP is a threat")
-			return
-		} else {
-			h.sentResponse(w, StatusOK, "IP is not a threat")
 			return
 		}
 	}

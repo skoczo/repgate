@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -25,7 +26,7 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 	}
 	req.Header.Set("Key", c.APIKey)
 	req.Header.Set("Accept", "application/json")
-	// set timeout to 10 seconds
+	// set timeout to 3 seconds
 	var client = &http.Client{
 		Timeout: 3 * time.Second,
 	}
@@ -49,7 +50,7 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	fmt.Println("AbuseIPDB response:", string(body))
+	slog.Debug("AbuseIPDB response:", "response", string(body))
 
 	if err := json.Unmarshal(body, &result); err != nil {
 		return 0, err

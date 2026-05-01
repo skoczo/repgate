@@ -1,2 +1,3 @@
 bin
-*.int
+internal-*
+cmd/repgate/__debug_bin*

@@ -1,3 +1,9 @@
+log_level: info
+
+# if fail_open is true, the server will allow traffic even if the threat source is not available
+# if fail_open is false, the server will block traffic if the threat source is not available
+fail_open: true
+
 AbuseIPDB:
   enabled: true
   api_key: "YOUR_API_KEY_HERE"

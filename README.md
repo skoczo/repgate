@@ -69,6 +69,8 @@ The current codebase expects:
 
 When running the app from VS Code, make sure the process starts with the repository root as the working directory. Relative paths such as data/repgate.db and db/migrations/001_init.sql are resolved from the current working directory, not from the location of the .go file.
 
+You should also create internal-config.yaml in main directory. It should be copty of config.yaml but with your configuration. internal-* files are not stored in the repo
+
 
 ## Dev Container
 The repository includes a Dev Container configuration for VS Code. 

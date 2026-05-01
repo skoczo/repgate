@@ -62,7 +62,7 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (ThreatCheckResult, error)
 	}
 
 	if confidenceScore > c.Config.AbuseIPDB.ConfidenceScoreThreshold {
-		c.Repo.Update(&model.IPRecord{
+		err = c.Repo.Update(&model.IPRecord{
 			IP:        ip,
 			Status:    "threat",
 			Score:     confidenceScore,
@@ -70,13 +70,16 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (ThreatCheckResult, error)
 			CheckedAt: time.Now(),
 			ExpiresAt: time.Now().Add(c.Config.AbuseIPDB.ExpirationTime),
 		})
+		if err != nil {
+			slog.Error("Error updating IP %s in AbuseIPDBClient: %v", ip, err)
+		}
 
 		return ThreatCheckResult{
 			IP:       ip,
 			IsThreat: true,
 		}, nil
 	} else {
-		c.Repo.Update(&model.IPRecord{
+		err = c.Repo.Update(&model.IPRecord{
 			IP:        ip,
 			Status:    "safe",
 			Score:     confidenceScore,
@@ -84,6 +87,9 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (ThreatCheckResult, error)
 			CheckedAt: time.Now(),
 			ExpiresAt: time.Now().Add(c.Config.AbuseIPDB.ExpirationTime),
 		})
+		if err != nil {
+			slog.Error("Error updating IP %s in AbuseIPDBClient: %v", ip, err)
+		}
 		return ThreatCheckResult{
 			IP:       ip,
 			IsThreat: false,

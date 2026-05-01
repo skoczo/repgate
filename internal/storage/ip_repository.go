@@ -61,9 +61,8 @@ func (r *IPRepository) Delete(ip string) error {
 }
 
 func (r *IPRepository) DeleteExpired(expiration time.Duration) error {
-	query := `DELETE FROM ip_records WHERE updated_at < ?`
-	expirationTime := time.Now().Add(-expiration)
-	_, err := r.db.Exec(query, expirationTime)
+	query := `DELETE FROM ip_records WHERE expires_at < ?`
+	_, err := r.db.Exec(query, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to delete expired IP records: %w", err)
 	}
