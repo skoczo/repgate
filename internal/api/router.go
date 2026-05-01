@@ -48,6 +48,10 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 		slog.String("host", r.Host))
 
 	for _, source := range h.threatSources {
+		if !source.Enabled() {
+			slog.Debug("threat source disabled, skipping", "source", source.Name())
+			continue
+		}
 		slog.Debug("checking threat source", "source", source.Name())
 		result, err := source.CheckIP(r.Header.Get("X-Client-IP"))
 

@@ -29,12 +29,8 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 
 	result, err := c.Repo.GetByIp(ip)
 	if err != nil {
-		// Log the error and return a non-threat result
-		slog.Error("Error checking IP %s in AbuseIPDBClient: %v", ip, err)
-		return ThreatCheckResult{
-			IP:       ip,
-			IsThreat: false,
-		}, nil
+		slog.Error("error reading ip from cache", "ip", ip, "error", err)
+		return ThreatCheckResult{}, err
 	}
 
 	if result != nil {
@@ -54,11 +50,8 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (ThreatCheckResult, error) {
 	confidenceScore, err := c.Client.CheckIP(ip)
 	if err != nil {
-		slog.Error("Error checking IP %s in AbuseIPDBClient: %v", ip, err)
-		return ThreatCheckResult{
-			IP:       ip,
-			IsThreat: false,
-		}, nil
+		slog.Error("error checking ip in abuseipdb", "ip", ip, "error", err)
+		return ThreatCheckResult{}, err
 	}
 
 	if confidenceScore > c.Config.AbuseIPDB.ConfidenceScoreThreshold {
@@ -71,7 +64,8 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (ThreatCheckResult, error)
 			ExpiresAt: time.Now().Add(c.Config.AbuseIPDB.ExpirationTime),
 		})
 		if err != nil {
-			slog.Error("Error updating IP %s in AbuseIPDBClient: %v", ip, err)
+			slog.Error("error updating threat ip in cache", "ip", ip, "error", err)
+			return ThreatCheckResult{}, err
 		}
 
 		return ThreatCheckResult{
@@ -88,7 +82,8 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (ThreatCheckResult, error)
 			ExpiresAt: time.Now().Add(c.Config.AbuseIPDB.ExpirationTime),
 		})
 		if err != nil {
-			slog.Error("Error updating IP %s in AbuseIPDBClient: %v", ip, err)
+			slog.Error("error updating safe ip in cache", "ip", ip, "error", err)
+			return ThreatCheckResult{}, err
 		}
 		return ThreatCheckResult{
 			IP:       ip,
