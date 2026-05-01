@@ -1,0 +1,2 @@
+$invalid: yaml: unmarshal errors:
+  line 1: cannot unmarshal !!map into config.Config
