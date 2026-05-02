@@ -16,6 +16,11 @@ run:
 test:
 	go test ./...
 
+# tests with coverage in html format
+test-coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+
 docker-build:
 	docker buildx build --load -t $(IMAGE) .
 

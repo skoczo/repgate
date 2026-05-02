@@ -15,6 +15,7 @@ type Config struct {
 		APIKey                   string        `yaml:"api_key"`
 		ExpirationTime           time.Duration `yaml:"expiration_time"`
 		ConfidenceScoreThreshold int           `yaml:"confidence_score_threshold"`
+		CacheMaxSize             int           `yaml:"cache_max_size"`
 	} `yaml:"AbuseIPDB"`
 }
 

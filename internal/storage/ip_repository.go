@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/skoczo/repgate/internal/config"
@@ -24,9 +25,6 @@ func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 
 	var record model.IPRecord
 	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // Not found
-		}
 		return nil, fmt.Errorf("failed to get IP record: %w", err)
 	}
 	return &record, nil
@@ -60,11 +58,17 @@ func (r *IPRepository) Delete(ip string) error {
 	return nil
 }
 
-func (r *IPRepository) DeleteExpired(expiration time.Duration) error {
-	query := `DELETE FROM ip_records WHERE expires_at < ?`
-	_, err := r.db.Exec(query, time.Now())
+func (r *IPRepository) DeleteExpired(expiration time.Time) error {
+	query := `DELETE FROM ip_records WHERE expires_at > ?`
+	result, err := r.db.Exec(query, expiration)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired IP records: %w", err)
 	}
+
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get affected rows: %w", err)
+	}
+	slog.Debug("expired IP records deleted", "count", count)
 	return nil
 }

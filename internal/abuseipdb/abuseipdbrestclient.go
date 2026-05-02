@@ -10,16 +10,24 @@ import (
 )
 
 type AbuseIPDBRestClient struct {
-	APIKey string
+	APIKey         string
+	AbustIPRestUrl string
+}
+
+func NewAbuseIPDBRestClient(apiKey string) *AbuseIPDBRestClient {
+	return &AbuseIPDBRestClient{
+		APIKey:         apiKey,
+		AbustIPRestUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90",
+	}
 }
 
 func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 	/*
-				example abusedb response
-				{"data":{"ipAddress":"165.154.23.177","isPublic":true,"ipVersion":4,"isWhitelisted":false,"abuseConfidenceScore":100,"countryCode":"HK","usageType":"Data Center\/Web Hosting\/Transit","isp":"UCLOUD INFORMATION TECHNOLOGY (HK) LIMITED","domain":"ucloud.cn","hostnames":[],"isTor":false,"totalReports":2067,"numDistinctUsers":165,"lastReportedAt":"2026-04-30T20:02:20+00:00"}}
+		example abusedb response
+		{"data":{"ipAddress":"165.154.23.177","isPublic":true,"ipVersion":4,"isWhitelisted":false,"abuseConfidenceScore":100,"countryCode":"HK","usageType":"Data Center\/Web Hosting\/Transit","isp":"UCLOUD INFORMATION TECHNOLOGY (HK) LIMITED","domain":"ucloud.cn","hostnames":[],"isTor":false,"totalReports":2067,"numDistinctUsers":165,"lastReportedAt":"2026-04-30T20:02:20+00:00"}}
 		time=2026-04-30T20:08:39.042Z level=ERROR msg="Error checking IP %s in AbuseIPDBClient: %v" 165.154
 	*/
-	url := fmt.Sprintf("https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90", ip)
+	url := fmt.Sprintf(c.AbustIPRestUrl, ip)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return 0, err

@@ -2,36 +2,38 @@ package cache
 
 import (
 	"sync"
-	"time"
-)
 
-type IPRecord struct {
-	IP        string
-	Status    string
-	Score     int
-	Source    string
-	CheckedAt time.Time
-	ExpiresAt time.Time
-}
+	"github.com/skoczo/repgate/internal/model"
+)
 
 type IPCache struct {
 	mu      sync.RWMutex
-	cache   map[string]IPRecord
+	cache   map[string]model.IPRecord
 	maxSize int
 }
 
 func NewIPCache(maxSize int) *IPCache {
-	return &IPCache{cache: make(map[string]IPRecord), maxSize: maxSize}
+	return &IPCache{cache: make(map[string]model.IPRecord), maxSize: maxSize, mu: sync.RWMutex{}}
 }
 
-func (c *IPCache) Get(ip string) (IPRecord, bool) {
+func (c *IPCache) Get(ip string) (model.IPRecord, bool) {
 	c.mu.RLock()
 	record, ok := c.cache[ip]
 	c.mu.RUnlock()
 	return record, ok
 }
 
-func (c *IPCache) Set(ip string, record IPRecord) {
+func (c *IPCache) Remove(ip string) {
+	c.mu.Lock()
+	delete(c.cache, ip)
+	c.mu.Unlock()
+}
+
+func (c *IPCache) Set(ip string, record model.IPRecord) {
+	// if exist in map skip record
+	if _, exists := c.cache[ip]; exists {
+		return
+	}
 	c.mu.Lock()
 	if len(c.cache) >= c.maxSize {
 		// remove 10% of the oldest records

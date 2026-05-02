@@ -38,6 +38,9 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool) http.Han
 }
 
 func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
+	// log time taken to process the request in Us
+	start_time := time.Now()
+
 	slog.Debug("request received",
 		slog.String("method", r.Method),
 		slog.String("path", r.URL.Path),
@@ -66,12 +69,18 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Debug("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
 		if result.IsThreat {
+			elapsed := time.Since(start_time)
+			slog.Debug("request processed", "elapsed", elapsed.String())
 			h.sentResponse(w, StatusForbidden, "IP is a threat")
 			return
 		}
 	}
 
+	elapsed := time.Since(start_time)
+	slog.Debug("request processed", "elapsed", elapsed.String())
+
 	h.sentResponse(w, StatusOK, "IP is not a threat")
+
 }
 
 func (h *Handler) sentResponse(w http.ResponseWriter, status int, data any) {

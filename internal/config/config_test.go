@@ -28,6 +28,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.AbuseIPDB.ConfidenceScoreThreshold != 50 {
 		t.Errorf("abuse ip db confidence score threshold is not 50 but %d", cfg.AbuseIPDB.ConfidenceScoreThreshold)
 	}
+	if cfg.AbuseIPDB.CacheMaxSize != 1000 {
+		t.Errorf("abuse ip db cache max size is not 1000 but %d", cfg.AbuseIPDB.CacheMaxSize)
+	}
 }
 
 func TestLoadConfigInvalidFile(t *testing.T) {
@@ -38,7 +41,7 @@ func TestLoadConfigInvalidFile(t *testing.T) {
 }
 
 func TestLoadConfigInvalidYAML(t *testing.T) {
-	_, err := LoadConfig("../../resources/config/invalid.yaml")
+	_, err := LoadConfig("../../resources/tests/config/invalid.yaml")
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}

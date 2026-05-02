@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/api"
 	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/storage"
@@ -65,14 +64,7 @@ func main() {
 func buildThreadSources(cfg *config.Config, repo *storage.IPRepository) []threatcheck.ThreatSource {
 	var sources []threatcheck.ThreatSource
 	if cfg.AbuseIPDB.Enabled {
-		sources = append(sources, &threatcheck.AbuseIPDBClient{
-			APIKey: cfg.AbuseIPDB.APIKey,
-			Repo:   *repo,
-			Client: &abuseipdb.AbuseIPDBRestClient{
-				APIKey: cfg.AbuseIPDB.APIKey,
-			},
-			Config: cfg,
-		})
+		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo))
 	}
 	return sources
 }

@@ -9,3 +9,4 @@ AbuseIPDB:
   api_key: "YOUR_API_KEY_HERE"
   expiration_time: 24h
   confidence_score_threshold: 50 # if the confidence score is greater than this threshold, the IP is considered a threat
+  cache_max_size: 1000 # maximum number of entries in the cache
