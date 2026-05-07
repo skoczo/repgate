@@ -46,6 +46,7 @@ jobs:
       with:
        filename: coverage.out
        target: coverage.svg
+       output: 'coverage.svg'
 
     - name: Commit badge
       run: |
