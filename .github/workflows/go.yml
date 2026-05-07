@@ -34,26 +34,12 @@ jobs:
     - name: Coverage
       run: make coverage
 
-    - name: Upload coverage report
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: |
-          coverage.out
-          coverage.html
-
-    - uses: tj-actions/coverage-badge-go@v2
-      with:
-       filename: coverage.out
-       target: coverage.svg
-       output: 'coverage.svg'
-
     - name: Commit badge
       run: |
         git config user.email "action@github.com"
         git config user.name "GitHub Action"
-        git add coverage.svg
-        git commit -m "chore: update coverage badge" || exit 0
+        git add README.md 
+        git commit -m "update coverage badge" || exit 0
         git push 
 
     - name: Set up Docker Buildx

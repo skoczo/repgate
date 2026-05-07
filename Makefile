@@ -18,8 +18,10 @@ test:
 
 # tests with coverage in html format
 coverage:
-	go test -coverprofile=coverage.out ./...
-	go tool cover -html=coverage.out -o coverage.html
+	go test ./... -covermode=count -coverprofile=coverage.out fmt
+	go tool cover -func=coverage.out -o=coverage.out
+	go install github.com/AlexBeauchemin/gobadge@v0.3.0
+	gobadge -filename coverage.out
 
 docker-build:
 	docker buildx build --load -t $(IMAGE) .
