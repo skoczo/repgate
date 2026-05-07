@@ -27,7 +27,7 @@ func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
 		// if error is no rows, return nil without error
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, err
 		}
 		return nil, fmt.Errorf("failed to get IP record: %w", err)
 	}

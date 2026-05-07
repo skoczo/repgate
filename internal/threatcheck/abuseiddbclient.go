@@ -1,6 +1,7 @@
 package threatcheck
 
 import (
+	"database/sql"
 	"log/slog"
 	"time"
 
@@ -54,7 +55,7 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 	}
 
 	result, err := c.Repo.GetByIp(ip)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		slog.Error("error reading ip from cache", "ip", ip, "error", err)
 		return ThreatCheckResult{}, err
 	}
