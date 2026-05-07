@@ -4,16 +4,21 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
 
 func OpenSQLiteDB(dbPath string) (*sql.DB, error) {
-	// Ensure the directory exists
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
+	// create empty file and all parent directories if it does not exist
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		if err := os.MkdirAll("data", 0755); err != nil {
+			return nil, fmt.Errorf("failed to create data directory: %w", err)
+		}
+		file, err := os.Create(dbPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create database file: %w", err)
+		}
+		file.Close()
 	}
 
 	// Open the SQLite database

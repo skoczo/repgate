@@ -24,7 +24,7 @@ func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository) *AbuseIP
 	return &AbuseIPDBClient{
 		APIKey:  cfg.AbuseIPDB.APIKey,
 		Repo:    repo,
-		Client:  &abuseipdb.AbuseIPDBRestClient{APIKey: cfg.AbuseIPDB.APIKey},
+		Client:  abuseipdb.NewAbuseIPDBRestClient(cfg.AbuseIPDB.APIKey),
 		Config:  cfg,
 		IPCache: cache.NewIPCache(cfg.AbuseIPDB.CacheMaxSize),
 	}
