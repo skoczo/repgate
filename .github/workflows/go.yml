@@ -42,6 +42,9 @@ jobs:
           coverage.out
           coverage.html
 
+    - name: Create badge directory
+      run: mkdir -p badges
+
     - uses: tj-actions/coverage-badge-go@v2
       with:
        filename: coverage.out
