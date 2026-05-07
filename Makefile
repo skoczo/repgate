@@ -17,7 +17,7 @@ test:
 	go test ./...
 
 # tests with coverage in html format
-test-coverage:
+coverage:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 
