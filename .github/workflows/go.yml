@@ -42,19 +42,16 @@ jobs:
           coverage.out
           coverage.html
 
-    - name: Create badge directory
-      run: mkdir -p badges
-
     - uses: tj-actions/coverage-badge-go@v2
       with:
        filename: coverage.out
-       target: badges/coverage.svg
+       target: coverage.svg
 
     - name: Commit badge
       run: |
         git config user.email "action@github.com"
         git config user.name "GitHub Action"
-        git add badges/coverage.svg
+        git add coverage.svg
         git commit -m "chore: update coverage badge" || exit 0
         git push 
 
