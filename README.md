@@ -1,5 +1,5 @@
 # !!!WORK IN PROGRESS, NOT READY YET!!!
-![Coverage](https://img.shields.io/badge/Coverage-11-red)
+![Coverage](https://img.shields.io/badge/Coverage-0-red)
 
 # Repgate
 
