@@ -31,16 +31,14 @@ jobs:
     - name: Test
       run: make test
 
-    - name: Coverage
-      run: make coverage
+    - name: Test & Coverage
+      run: go test ./... -coverprofile=coverage.out -covermode=atomic
 
-    - name: Commit badge
-      run: |
-        git config user.email "action@github.com"
-        git config user.name "GitHub Action"
-        git add README.md 
-        git commit -m "update coverage badge" || exit 0
-        git push 
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.out
+        # token: ${{ secrets.CODECOV_TOKEN }} # Only needed if your repo is PRIVATE
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v4

@@ -1,5 +1,6 @@
 # !!!WORK IN PROGRESS, NOT READY YET!!!
-![Coverage](https://img.shields.io/badge/Coverage-0-red)
+[![codecov](https://codecov.io/gh/skoczo/repgate/graph/badge.svg)](https://codecov.io/gh/skoczo/repgate)
+[![Repgate CI](https://github.com/skoczo/repgate/actions/workflows/go.yml/badge.svg)](https://github.com/adskoczy/repgate/actions/workflows/go.yml)
 
 # Repgate
 
