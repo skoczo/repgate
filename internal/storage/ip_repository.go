@@ -35,7 +35,7 @@ func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 }
 
 // update method should be used for saving new records and updating existing records
-func (r *IPRepository) Update(record *model.IPRecord) error {
+func (r *IPRepository) Update(record *model.IPRecord) (*model.IPRecord, error) {
 	query := `
 	INSERT INTO ip_records
 	VALUES (?, ?, ?, ?, ?, ?)
@@ -48,9 +48,14 @@ func (r *IPRepository) Update(record *model.IPRecord) error {
 	`
 	_, err := r.db.Exec(query, record.IP, record.Status, record.Score, record.Source, time.Now(), time.Now().Add(r.expirationTime))
 	if err != nil {
-		return fmt.Errorf("failed to save IP record: %w", err)
+		return nil, fmt.Errorf("failed to save IP record: %w", err)
 	}
-	return nil
+
+	dbRecord, err := r.GetByIp(record.IP)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IP record after saving: %w", err)
+	}
+	return dbRecord, nil
 }
 
 func (r *IPRepository) Delete(ip string) error {
@@ -63,7 +68,7 @@ func (r *IPRepository) Delete(ip string) error {
 }
 
 func (r *IPRepository) DeleteExpired(expiration time.Time) error {
-	query := `DELETE FROM ip_records WHERE expires_at > ?`
+	query := `DELETE FROM ip_records WHERE expires_at <= ?`
 	result, err := r.db.Exec(query, expiration)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired IP records: %w", err)
