@@ -27,7 +27,6 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool) http.Han
 	h := &Handler{threatSources: threatSources, failOpen: failOpen}
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Timeout(5 * time.Second))
@@ -41,21 +40,32 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 	// log time taken to process the request in Us
 	start_time := time.Now()
 
-	slog.Debug("request received",
-		slog.String("method", r.Method),
-		slog.String("path", r.URL.Path),
-		slog.String("remote_addr", r.RemoteAddr),
-		slog.String("x_client_ip", r.Header.Get("X-Client-IP")),
-		slog.String("cf_connecting_ip", r.Header.Get("CF-Connecting-IP")),
-		slog.String("user_agent", r.UserAgent()),
-		slog.String("host", r.Host))
+	defer func() {
+		elapsed := time.Since(start_time)
+		slog.Info("request completed", "elapsed", elapsed.String())
+	}()
+
+	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
+		slog.Debug("request received",
+			slog.String("method", r.Method),
+			slog.String("path", r.URL.Path),
+			slog.String("remote_addr", r.RemoteAddr),
+			slog.String("x_client_ip", r.Header.Get("X-Client-IP")),
+			slog.String("cf_connecting_ip", r.Header.Get("CF-Connecting-IP")),
+			slog.String("user_agent", r.UserAgent()),
+			slog.String("host", r.Host))
+	}
 
 	for _, source := range h.threatSources {
 		if !source.Enabled() {
-			slog.Debug("threat source disabled, skipping", "source", source.Name())
+			if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
+				slog.Debug("threat source disabled, skipping", "source", source.Name())
+			}
 			continue
 		}
-		slog.Debug("checking threat source", "source", source.Name())
+		if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
+			slog.Debug("checking threat source", "source", source.Name())
+		}
 		result, err := source.CheckIP(r.Header.Get("X-Client-IP"))
 
 		if err != nil {
@@ -67,10 +77,10 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 			h.sentResponse(w, StatusInternalServerError, err.Error())
 			return
 		}
-		slog.Debug("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
+		if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
+			slog.Debug("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
+		}
 		if result.IsThreat {
-			elapsed := time.Since(start_time)
-			slog.Debug("request processed", "elapsed", elapsed.String())
 			h.sentResponse(w, StatusForbidden, "IP is a threat")
 			return
 		}

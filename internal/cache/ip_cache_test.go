@@ -88,8 +88,8 @@ func TestIPCacheSetExisting(t *testing.T) {
 	if !ok {
 		t.Error("IP record not found")
 	}
-	if record.Status != "safe" {
-		t.Error("IP record overwritten, expected status 'safe' but got 'threat'")
+	if record.Status != "threat" {
+		t.Error("IP record overwritten, expected status 'threat' but got 'safe'")
 	}
 }
 

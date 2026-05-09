@@ -46,6 +46,8 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 		slog.Debug("ip found in cache", "ip", ip, "status", cached_result.Status, "score", cached_result.Score)
 		if cached_result.ExpiresAt.Before(time.Now()) {
 			c.IPCache.Remove(ip)
+			c.Repo.Delete(ip)
+			slog.Debug("cached result expired, removed from cache and database", "ip", ip)
 		} else {
 			return ThreatCheckResult{
 				IP:       cached_result.IP,

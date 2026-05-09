@@ -1,6 +1,9 @@
 {
   "name": "repgate-go",
-  "image": "mcr.microsoft.com/devcontainers/go:1.25-bookworm",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
   "customizations": {
     "vscode": {
       "extensions": [

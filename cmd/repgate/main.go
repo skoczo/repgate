@@ -20,7 +20,6 @@ import (
 // the default config file path is config.yaml
 // the config file path is relative to the current working directory
 // the config file path is a string
-// the config file path is a string
 func main() {
 	cfgPath := flag.String("c", "config.yaml", "config file path")
 	flag.Parse()

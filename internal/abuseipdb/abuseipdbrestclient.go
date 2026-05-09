@@ -12,12 +12,14 @@ import (
 type AbuseIPDBRestClient struct {
 	APIKey         string
 	AbustIPRestUrl string
+	HTTPClient     *http.Client
 }
 
 func NewAbuseIPDBRestClient(apiKey string) *AbuseIPDBRestClient {
 	return &AbuseIPDBRestClient{
 		APIKey:         apiKey,
 		AbustIPRestUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90",
+		HTTPClient:     &http.Client{Timeout: 3 * time.Second},
 	}
 }
 
@@ -29,16 +31,10 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 	*/
 	url := fmt.Sprintf(c.AbustIPRestUrl, ip)
 	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return 0, err
-	}
 	req.Header.Set("Key", c.APIKey)
 	req.Header.Set("Accept", "application/json")
-	// set timeout to 3 seconds
-	var client = &http.Client{
-		Timeout: 3 * time.Second,
-	}
-	resp, err := client.Do(req)
+
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return 0, err
 	}

@@ -3,3 +3,14 @@ internal-*
 cmd/repgate/__debug_bin*
 private
 coverage*
+data
+logs
+*.log
+*.out
+*.prof
+*.pprof
+*.test
+*.tmp
+*.cache
+*.db
+*.sqlite
