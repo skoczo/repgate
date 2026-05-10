@@ -1,0 +1,89 @@
+package api
+
+import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/skoczo/repgate/internal/threatcheck"
+)
+
+type mockThreatSource struct {
+	name    string
+	enabled bool
+	result  threatcheck.ThreatCheckResult
+	err     error
+}
+
+func (m *mockThreatSource) Name() string { return m.name }
+func (m *mockThreatSource) Enabled() bool { return m.enabled }
+func (m *mockThreatSource) CheckIP(ip string) (threatcheck.ThreatCheckResult, error) {
+	return m.result, m.err
+}
+
+func TestHandler_checkHanlder(t *testing.T) {
+	tests := []struct {
+		name           string
+		failOpen       bool
+		threatSources  []threatcheck.ThreatSource
+		expectedStatus int
+	}{
+		{
+			name:     "no threat",
+			failOpen: false,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: true, result: threatcheck.ThreatCheckResult{IsThreat: false}},
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:     "is threat",
+			failOpen: false,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: true, result: threatcheck.ThreatCheckResult{IsThreat: true}},
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:     "disabled source",
+			failOpen: false,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: false},
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:     "error fail open",
+			failOpen: true,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: true, err: errors.New("some error")},
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:     "error fail closed",
+			failOpen: false,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: true, err: errors.New("some error")},
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(tt.threatSources, tt.failOpen)
+
+			req := httptest.NewRequest("GET", "/check", nil)
+			req.Header.Set("X-Client-IP", "127.0.0.1")
+			rr := httptest.NewRecorder()
+
+			router.ServeHTTP(rr, req)
+
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d", tt.expectedStatus, rr.Code)
+			}
+		})
+	}
+}

@@ -41,7 +41,6 @@ coverage:
 	go test ./... -covermode=count -coverprofile=coverage.out
 	go tool cover -func=coverage.out -o=coverage.func
 	go tool cover -html=coverage.out -o coverage.html
-	go run github.com/AlexBeauchemin/gobadge@v0.4.0 -filename coverage.func
 	@echo "Coverage HTML generated: coverage.html"
 
 docker-build:
