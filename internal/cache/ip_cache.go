@@ -30,8 +30,8 @@ func NewIPCache(maxSize int) *IPCache {
 }
 
 func (c *IPCache) Get(ip string) (model.IPRecord, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if entry, exists := c.cache[ip]; exists {
 		// Move to front (most recently used)

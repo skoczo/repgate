@@ -4,7 +4,7 @@ FROM debian:bookworm-slim
 
 # Install graphviz
 RUN apt-get update 
-RUN apt-get install -y graphviz make build-essential
+RUN apt-get install -y graphviz make build-essential procps
 
 # Install Go
 RUN apt-get install -y wget
