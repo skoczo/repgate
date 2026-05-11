@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"testing"
@@ -38,7 +39,7 @@ func TestSetLogger(t *testing.T) {
 	setLogger("debug")
 	
 	// Default level should be set
-	if !slog.Default().Enabled(nil, slog.LevelDebug) {
+	if !slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
 		t.Error("expected debug level to be enabled")
 	}
 }

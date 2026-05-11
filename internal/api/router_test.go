@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
@@ -21,6 +22,7 @@ func (m *mockThreatSource) Enabled() bool { return m.enabled }
 func (m *mockThreatSource) CheckIP(ip string) (threatcheck.ThreatCheckResult, error) {
 	return m.result, m.err
 }
+func (m *mockThreatSource) CleanExpired(now time.Time) {}
 
 func TestHandler_checkHanlder(t *testing.T) {
 	tests := []struct {

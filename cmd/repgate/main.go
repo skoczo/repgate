@@ -44,6 +44,9 @@ func main() {
 	repo := storage.NewIPRepository(db, cfg)
 	threatSources := buildThreadSources(cfg, repo)
 
+	// start background worker to periodically clean expired records from db and caches
+	go startCleanupWorker(repo, threatSources)
+
 	slog.Info("Configuration loaded successfully", "AbuseIPDBEnabled", cfg.AbuseIPDB.Enabled)
 
 	slog.Info("Starting IP Auth Server")
@@ -71,6 +74,23 @@ func buildThreadSources(cfg *config.Config, repo *storage.IPRepository) []threat
 		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo))
 	}
 	return sources
+}
+
+func startCleanupWorker(repo *storage.IPRepository, sources []threatcheck.ThreatSource) {
+	ticker := time.NewTicker(60 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		<-ticker.C
+		now := time.Now()
+		if err := repo.DeleteExpired(now); err != nil {
+			slog.Error("Failed to delete expired IP records from repository", "error", err)
+		}
+
+		for _, source := range sources {
+			source.CleanExpired(now)
+		}
+	}
 }
 
 func setLogger(logLevel string) {

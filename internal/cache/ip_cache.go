@@ -87,3 +87,15 @@ func (c *IPCache) evictLRU() {
 		c.lru.Remove(element)
 	}
 }
+
+func (c *IPCache) RemoveExpired(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for ip, entry := range c.cache {
+		if entry.record.ExpiresAt.Before(now) {
+			c.lru.Remove(entry.element)
+			delete(c.cache, ip)
+		}
+	}
+}
