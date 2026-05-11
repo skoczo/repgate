@@ -20,8 +20,8 @@ func NewIPRepository(db *sql.DB, cfg *config.Config) *IPRepository {
 }
 
 func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
-	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ?`
-	row := r.db.QueryRow(query, ip)
+	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ? and expires_at > ?`
+	row := r.db.QueryRow(query, ip, time.Now())
 
 	var record model.IPRecord
 	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -56,6 +57,19 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 			slog.String("host", r.Host))
 	}
 
+	// validate if x-client-ip is set and is a valid ip address
+	ip := r.Header.Get("X-Client-IP")
+	if ip == "" {
+		slog.Warn("X-Client-IP header is not set")
+		h.sentResponse(w, StatusForbidden, "X-Client-IP header is not set")
+		return
+	}
+	if _, err := netip.ParseAddr(ip); err != nil {
+		slog.Warn("X-Client-IP header is not a valid IP address", "ip", ip)
+		h.sentResponse(w, StatusForbidden, "X-Client-IP header is not a valid IP address")
+		return
+	}
+
 	for _, source := range h.threatSources {
 		if !source.Enabled() {
 			if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
@@ -66,7 +80,7 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 		if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
 			slog.Debug("checking threat source", "source", source.Name())
 		}
-		result, err := source.CheckIP(r.Header.Get("X-Client-IP"))
+		result, err := source.CheckIP(ip)
 
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err)

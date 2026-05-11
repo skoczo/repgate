@@ -45,14 +45,9 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 	if exists {
 		slog.Debug("ip found in cache", "ip", ip, "status", cached_result.Status, "score", cached_result.Score)
 		if cached_result.ExpiresAt.Before(time.Now()) {
-			c.IPCache.Remove(ip)
-			c.Repo.Delete(ip)
-			slog.Debug("cached result expired, removed from cache and database", "ip", ip)
+			cleanExpiredIP(c, ip)
 		} else {
-			return ThreatCheckResult{
-				IP:       cached_result.IP,
-				IsThreat: c.isThread(cached_result.Score),
-			}, nil
+			return c.createResult(cached_result.IP, cached_result.Score), nil
 		}
 	}
 
@@ -64,17 +59,8 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 
 	if result != nil {
 		slog.Debug("ip found in database", "ip", ip, "status", result.Status, "score", result.Score)
-		if result.ExpiresAt.Before(time.Now()) {
-			// remove expired record from cache and database
-			c.IPCache.Remove(ip)
-			err = c.Repo.Delete(ip)
-		} else {
-			c.IPCache.Set(ip, *result)
-			return ThreatCheckResult{
-				IP:       result.IP,
-				IsThreat: c.isThread(result.Score),
-			}, nil
-		}
+		c.IPCache.Set(ip, *result)
+		return c.createResult(result.IP, result.Score), nil
 	}
 
 	// if not in cache, check abuseipdb and update cache and database
@@ -87,10 +73,16 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 	c.IPCache.Set(ip, *ip_record)
 	c.Repo.Update(ip_record)
 
-	return ThreatCheckResult{
-		IP:       ip_record.IP,
-		IsThreat: c.isThread(ip_record.Score),
-	}, nil
+	return c.createResult(ip_record.IP, ip_record.Score), nil
+}
+
+func cleanExpiredIP(c *AbuseIPDBClient, ip string) {
+	c.IPCache.Remove(ip)
+	err := c.Repo.Delete(ip)
+	if err != nil {
+		slog.Error("error deleting ip record from cache", "ip", ip, "error", err)
+	}
+	slog.Debug("cached result expired, removed from cache and database", "ip", ip)
 }
 
 func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (*model.IPRecord, error) {
@@ -121,6 +113,13 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (*model.IPRecord, error) {
 	}
 
 	return savedRecord, nil
+}
+
+func (c *AbuseIPDBClient) createResult(ip string, score int) ThreatCheckResult {
+	return ThreatCheckResult{
+		IP:       ip,
+		IsThreat: c.isThread(score),
+	}
 }
 
 func (c *AbuseIPDBClient) isThread(score int) bool {

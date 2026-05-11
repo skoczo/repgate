@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"flag"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/skoczo/repgate/internal/api"
@@ -20,6 +23,7 @@ import (
 // the default config file path is config.yaml
 // the config file path is relative to the current working directory
 // the config file path is a string
+// program will handle SIGINT and SIGTERM signals to gracefully shut down
 func main() {
 	cfgPath := flag.String("c", "config.yaml", "config file path")
 	flag.Parse()
@@ -51,10 +55,11 @@ func main() {
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
 	}
+	setSignalHandler(db, server)
 
 	slog.Info("Server is listening on :8080")
 
-	if err := server.ListenAndServe(); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("Server failed to start", "error", err)
 		os.Exit(1)
 	}
@@ -100,4 +105,20 @@ func createDBAndRunDBMigrations() *sql.DB {
 		os.Exit(1)
 	}
 	return db
+}
+
+func setSignalHandler(db *sql.DB, server *http.Server) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		slog.Info("Shutting down server...")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			slog.Error("Server forced to shutdown", "error", err)
+		}
+		slog.Info("Server exited")
+		os.Exit(0)
+	}()
 }

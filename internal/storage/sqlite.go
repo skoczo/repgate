@@ -30,6 +30,7 @@ func OpenSQLiteDB(dbPath string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1) // SQLite does not support concurrent writes
 
 	if err := db.Ping(); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
