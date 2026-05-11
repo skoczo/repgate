@@ -12,7 +12,7 @@ import (
 	"github.com/skoczo/repgate/internal/storage"
 )
 
-type AbuseIPDBClient struct {
+type AbuseIPDBThreatSource struct {
 	APIKey  string
 	Repo    *storage.IPRepository
 	Client  *abuseipdb.AbuseIPDBRestClient
@@ -21,8 +21,8 @@ type AbuseIPDBClient struct {
 }
 
 // initialize ipcache with max size from config
-func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository) *AbuseIPDBClient {
-	return &AbuseIPDBClient{
+func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository) *AbuseIPDBThreatSource {
+	return &AbuseIPDBThreatSource{
 		APIKey:  cfg.AbuseIPDB.APIKey,
 		Repo:    repo,
 		Client:  abuseipdb.NewAbuseIPDBRestClient(cfg.AbuseIPDB.APIKey),
@@ -31,15 +31,15 @@ func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository) *AbuseIP
 	}
 }
 
-func (c *AbuseIPDBClient) Name() string {
+func (c *AbuseIPDBThreatSource) Name() string {
 	return "AbuseIPDB"
 }
 
-func (c *AbuseIPDBClient) Enabled() bool {
+func (c *AbuseIPDBThreatSource) Enabled() bool {
 	return c.APIKey != ""
 }
 
-func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
+func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 	// check ip in cache first
 	cached_result, exists := c.IPCache.Get(ip)
 	if exists {
@@ -76,7 +76,7 @@ func (c *AbuseIPDBClient) CheckIP(ip string) (ThreatCheckResult, error) {
 	return c.createResult(ip_record.IP, ip_record.Score), nil
 }
 
-func cleanExpiredIP(c *AbuseIPDBClient, ip string) {
+func cleanExpiredIP(c *AbuseIPDBThreatSource, ip string) {
 	c.IPCache.Remove(ip)
 	err := c.Repo.Delete(ip)
 	if err != nil {
@@ -85,7 +85,7 @@ func cleanExpiredIP(c *AbuseIPDBClient, ip string) {
 	slog.Debug("cached result expired, removed from cache and database", "ip", ip)
 }
 
-func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (*model.IPRecord, error) {
+func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, error) {
 	confidenceScore, err := c.Client.CheckIP(ip)
 	if err != nil {
 		slog.Error("error checking ip in abuseipdb", "ip", ip, "error", err)
@@ -115,14 +115,14 @@ func (c *AbuseIPDBClient) abuseiddbRequest(ip string) (*model.IPRecord, error) {
 	return savedRecord, nil
 }
 
-func (c *AbuseIPDBClient) createResult(ip string, score int) ThreatCheckResult {
+func (c *AbuseIPDBThreatSource) createResult(ip string, score int) ThreatCheckResult {
 	return ThreatCheckResult{
 		IP:       ip,
 		IsThreat: c.isThread(score),
 	}
 }
 
-func (c *AbuseIPDBClient) isThread(score int) bool {
+func (c *AbuseIPDBThreatSource) isThread(score int) bool {
 	if score >= c.Config.AbuseIPDB.ConfidenceScoreThreshold {
 		return true
 	}
