@@ -16,6 +16,9 @@ run:
 test:
 	go test ./...
 
+test-integration:
+	go test -tags=integration ./tests/integration/... -v
+
 # benchmarks execution with reporting in a human-readable format
 bench:
 	@bash -lc 'set -o pipefail; go test ./internal/cache -run=^$$ -bench=. -benchmem -cpuprofile=cpu.out -memprofile=mem.out | tee bench.out'
