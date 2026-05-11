@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/config"
+	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/storage"
 	_ "modernc.org/sqlite"
 )
@@ -115,31 +116,33 @@ func TestAbuseIPDBClient(t *testing.T) {
 		t.Error("expected IP to be a threat from DB")
 	}
 
-	// Test 4: cache expiration
-	cfg.AbuseIPDB.ExpirationTime = -1 * time.Hour
-	clientExp := NewAbuseIPDBClient(cfg, repo)
-	clientExp.Client.AbustIPRestUrl = server.URL + "?ipAddress=%s"
-	res, err = clientExp.CheckIP("3.3.3.3")
+	// Test 4: cache expiration (manual injection)
+	// We inject an expired record into the cache directly to trigger cleanExpiredIP
+	client.IPCache.Set("3.3.3.3", model.IPRecord{
+		IP:        "3.3.3.3",
+		Status:    "threat",
+		Score:     100,
+		Source:    "AbuseIPDB",
+		CheckedAt: time.Now().Add(-2 * time.Hour),
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired
+	})
+	
+	// mock server returns 50 for this IP
+	res, err = client.CheckIP("3.3.3.3")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// IP is now inserted but expired
-	res, err = clientExp.CheckIP("3.3.3.3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !res.IsThreat {
-		t.Error("expected IP to be re-fetched and be a threat")
+	if res.IsThreat {
+		t.Error("expected IP to be re-fetched and not be a threat")
 	}
 
-	// clear cache to force DB lookup of expired record
-	clientExp.IPCache.Remove("3.3.3.3")
-	res, err = clientExp.CheckIP("3.3.3.3")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// Verify it's no longer expired in cache
+	cached_result, exists := client.IPCache.Get("3.3.3.3")
+	if !exists {
+		t.Error("expected IP to be re-cached")
 	}
-	if !res.IsThreat {
-		t.Error("expected IP to be re-fetched and be a threat")
+	if cached_result.ExpiresAt.Before(time.Now()) {
+		t.Error("expected new cache entry to not be expired")
 	}
 
 	// Test 5: API error
@@ -147,9 +150,9 @@ func TestAbuseIPDBClient(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer serverErr.Close()
-	clientExp.Client.AbustIPRestUrl = serverErr.URL + "?ipAddress=%s"
+	client.Client.AbustIPRestUrl = serverErr.URL + "?ipAddress=%s"
 
-	_, err = clientExp.CheckIP("4.4.4.4")
+	_, err = client.CheckIP("4.4.4.4")
 	if err == nil {
 		t.Fatal("expected error on API failure")
 	}

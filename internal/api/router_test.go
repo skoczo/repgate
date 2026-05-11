@@ -69,6 +69,22 @@ func TestHandler_checkHanlder(t *testing.T) {
 			},
 			expectedStatus: http.StatusInternalServerError,
 		},
+		{
+			name:     "missing X-Client-IP",
+			failOpen: false,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: true},
+			},
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:     "invalid X-Client-IP",
+			failOpen: false,
+			threatSources: []threatcheck.ThreatSource{
+				&mockThreatSource{name: "Mock", enabled: true},
+			},
+			expectedStatus: http.StatusForbidden,
+		},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +92,11 @@ func TestHandler_checkHanlder(t *testing.T) {
 			router := NewRouter(tt.threatSources, tt.failOpen)
 
 			req := httptest.NewRequest("GET", "/check", nil)
-			req.Header.Set("X-Client-IP", "127.0.0.1")
+			if tt.name == "invalid X-Client-IP" {
+				req.Header.Set("X-Client-IP", "invalid-ip")
+			} else if tt.name != "missing X-Client-IP" {
+				req.Header.Set("X-Client-IP", "127.0.0.1")
+			}
 			rr := httptest.NewRecorder()
 
 			router.ServeHTTP(rr, req)
