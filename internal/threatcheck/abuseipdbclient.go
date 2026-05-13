@@ -134,7 +134,6 @@ func (c *AbuseIPDBThreatSource) CleanExpired(now time.Time) {
 	c.IPCache.RemoveExpired(now)
 }
 
-
 func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, error) {
 	confidenceScore, err := c.Client.CheckIP(ip)
 	if err != nil {

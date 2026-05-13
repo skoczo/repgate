@@ -8,8 +8,14 @@ import (
 )
 
 type Config struct {
-	LogLevel  string `yaml:"log_level"`
-	FailOpen  bool   `yaml:"fail_open"`
+	LogLevel string `yaml:"log_level"`
+	FailOpen bool   `yaml:"fail_open"`
+	Server   struct {
+		Port              string        `yaml:"port"`
+		ReadTimeout       time.Duration `yaml:"read_timeout"`
+		WriteTimeout      time.Duration `yaml:"write_timeout"`
+		ReadHeaderTimeout time.Duration `yaml:"read_header_timeout"`
+	} `yaml:"server"`
 	AbuseIPDB struct {
 		Enabled                  bool          `yaml:"enabled"`
 		APIKey                   string        `yaml:"api_key"`

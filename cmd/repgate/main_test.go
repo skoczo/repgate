@@ -37,7 +37,7 @@ func TestParseLogLevel(t *testing.T) {
 func TestSetLogger(t *testing.T) {
 	// Should not panic or exit
 	setLogger("debug")
-	
+
 	// Default level should be set
 	if !slog.Default().Enabled(context.TODO(), slog.LevelDebug) {
 		t.Error("expected debug level to be enabled")

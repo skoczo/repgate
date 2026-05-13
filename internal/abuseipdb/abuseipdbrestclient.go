@@ -13,18 +13,18 @@ import (
 )
 
 type AbuseIPDBRestClient struct {
-	APIKey         string
+	APIKey           string
 	AbuseIPDBRestUrl string
-	HTTPClient     *http.Client
-	requestGroup   *singleflight.Group
+	HTTPClient       *http.Client
+	requestGroup     *singleflight.Group
 }
 
 func NewAbuseIPDBRestClient(apiKey string) *AbuseIPDBRestClient {
 	return &AbuseIPDBRestClient{
-		APIKey:         apiKey,
+		APIKey:           apiKey,
 		AbuseIPDBRestUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90",
-		HTTPClient:     &http.Client{Timeout: 3 * time.Second},
-		requestGroup:   &singleflight.Group{},
+		HTTPClient:       &http.Client{Timeout: 3 * time.Second},
+		requestGroup:     &singleflight.Group{},
 	}
 }
 

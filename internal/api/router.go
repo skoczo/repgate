@@ -24,13 +24,13 @@ type Handler struct {
 	failOpen      bool
 }
 
-func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool) http.Handler {
+func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, timeout time.Duration) http.Handler {
 	h := &Handler{threatSources: threatSources, failOpen: failOpen}
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RequestID)
-	r.Use(middleware.Timeout(5 * time.Second))
+	r.Use(middleware.Timeout(timeout))
 
 	r.Get("/check", h.checkHandler)
 
@@ -43,7 +43,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		elapsed := time.Since(start_time)
-		slog.Info("request completed", "elapsed", elapsed.String())
+		slog.Debug("request completed", "elapsed", elapsed.String())
 	}()
 
 	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {

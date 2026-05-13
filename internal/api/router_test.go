@@ -17,7 +17,7 @@ type mockThreatSource struct {
 	err     error
 }
 
-func (m *mockThreatSource) Name() string { return m.name }
+func (m *mockThreatSource) Name() string  { return m.name }
 func (m *mockThreatSource) Enabled() bool { return m.enabled }
 func (m *mockThreatSource) CheckIP(ip string) (threatcheck.ThreatCheckResult, error) {
 	return m.result, m.err
@@ -91,7 +91,7 @@ func TestHandler_checkHanlder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(tt.threatSources, tt.failOpen)
+			router := NewRouter(tt.threatSources, tt.failOpen, 5*time.Second)
 
 			req := httptest.NewRequest("GET", "/check", nil)
 			if tt.name == "invalid X-Client-IP" {

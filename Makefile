@@ -11,7 +11,7 @@ build:
 	go build -o bin/$(APP) ./cmd/repgate
 
 run:
-	go run ./cmd/repgate
+	go run ./cmd/repgate -c internal-config.yaml
 
 test:
 	go test ./...

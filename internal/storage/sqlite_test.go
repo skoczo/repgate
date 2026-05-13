@@ -25,9 +25,9 @@ func TestOpenSQLiteDB(t *testing.T) {
 		t.Fatalf("expected no error on existing db, got %v", err)
 	}
 	defer db2.Close()
-	
+
 	// Test error case with invalid path
-	_, err = OpenSQLiteDB("/invalid/path/that/cannot/be/created/test.db")
+	_, err = OpenSQLiteDB("/invalid2/path/that/cannot/be/created/test.db")
 	if err == nil {
 		t.Fatal("expected error with invalid path")
 	}

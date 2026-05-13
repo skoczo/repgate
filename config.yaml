@@ -4,6 +4,12 @@ log_level: info
 # if fail_open is false, the server will block traffic if the threat source is not available
 fail_open: true
 
+server:
+  port: ":8080"
+  read_timeout: 5s
+  write_timeout: 10s
+  read_header_timeout: 2s
+
 AbuseIPDB:
   enabled: true
   api_key: "YOUR_API_KEY_HERE"

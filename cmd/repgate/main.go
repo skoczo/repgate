@@ -52,15 +52,15 @@ func main() {
 	slog.Info("Starting IP Auth Server")
 
 	server := &http.Server{
-		Addr:              ":8080",
-		Handler:           api.NewRouter(threatSources, cfg.FailOpen),
-		ReadHeaderTimeout: 2 * time.Second,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		Addr:              cfg.Server.Port,
+		Handler:           api.NewRouter(threatSources, cfg.FailOpen, cfg.Server.ReadTimeout),
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
 	}
 	setSignalHandler(db, server)
 
-	slog.Info("Server is listening on :8080")
+	slog.Info("Server is listening on " + cfg.Server.Port)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("Server failed to start", "error", err)
