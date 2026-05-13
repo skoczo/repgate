@@ -59,7 +59,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	defer server.Close()
 
 	client := NewAbuseIPDBClient(cfg, repo)
-	client.Client.AbustIPRestUrl = server.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s"
 
 	if client.Name() != "AbuseIPDB" {
 		t.Errorf("expected name AbuseIPDB, got %s", client.Name())
@@ -96,7 +96,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 50}}`)
 	}))
 	defer server2.Close()
-	client.Client.AbustIPRestUrl = server2.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestUrl = server2.URL + "?ipAddress=%s"
 
 	res, err = client.CheckIP("2.2.2.2")
 	if err != nil {
@@ -126,7 +126,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		CheckedAt: time.Now().Add(-2 * time.Hour),
 		ExpiresAt: time.Now().Add(-1 * time.Hour), // Expired
 	})
-	
+
 	// mock server returns 50 for this IP
 	res, err = client.CheckIP("3.3.3.3")
 	if err != nil {
@@ -150,7 +150,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer serverErr.Close()
-	client.Client.AbustIPRestUrl = serverErr.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestUrl = serverErr.URL + "?ipAddress=%s"
 
 	_, err = client.CheckIP("4.4.4.4")
 	if err == nil {
@@ -185,7 +185,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	defer errorServer.Close()
 
 	client := NewAbuseIPDBClient(cfg, repo)
-	client.Client.AbustIPRestUrl = errorServer.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestUrl = errorServer.URL + "?ipAddress=%s"
 
 	// Failure 1
 	_, err := client.CheckIP("10.0.0.1")
@@ -199,7 +199,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 		t.Fatal("expected error on 2nd API failure")
 	}
 
-	// Circuit should now be open. 
+	// Circuit should now be open.
 	// Failure 3 (Circuit Breaker rejects before making API call)
 	_, err = client.CheckIP("10.0.0.3")
 	if err == nil || err.Error() != "circuit breaker open" {
@@ -226,7 +226,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 20}}`)
 	}))
 	defer successServer.Close()
-	client.Client.AbustIPRestUrl = successServer.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestUrl = successServer.URL + "?ipAddress=%s"
 
 	// This request should succeed and close the circuit breaker
 	res, err = client.CheckIP("10.0.0.5")
@@ -237,9 +237,9 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 		t.Errorf("expected safe result, got threat")
 	}
 
-	// We can verify that circuit is fully closed by making another request, 
+	// We can verify that circuit is fully closed by making another request,
 	// even if we switch back to error server, it shouldn't be rejected by circuit breaker immediately
-	client.Client.AbustIPRestUrl = errorServer.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestUrl = errorServer.URL + "?ipAddress=%s"
 	client.Config.AbuseIPDB.CircuitBreaker.OpenOnError = false // Reset Fail closed
 	_, err = client.CheckIP("10.0.0.6")
 	if err == nil || err.Error() == "circuit breaker open" {

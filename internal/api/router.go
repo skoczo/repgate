@@ -32,12 +32,12 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool) http.Han
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Timeout(5 * time.Second))
 
-	r.Get("/check", h.checkHanlder)
+	r.Get("/check", h.checkHandler)
 
 	return r
 }
 
-func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 	// log time taken to process the request in Us
 	start_time := time.Now()
 
@@ -61,12 +61,12 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 	ip := r.Header.Get("X-Client-IP")
 	if ip == "" {
 		slog.Warn("X-Client-IP header is not set")
-		h.sentResponse(w, StatusForbidden, "X-Client-IP header is not set")
+		h.sendResponse(w, StatusForbidden, "X-Client-IP header is not set")
 		return
 	}
 	if _, err := netip.ParseAddr(ip); err != nil {
 		slog.Warn("X-Client-IP header is not a valid IP address", "ip", ip)
-		h.sentResponse(w, StatusForbidden, "X-Client-IP header is not a valid IP address")
+		h.sendResponse(w, StatusForbidden, "X-Client-IP header is not a valid IP address")
 		return
 	}
 
@@ -85,17 +85,17 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err)
 			if h.failOpen {
-				h.sentResponse(w, StatusOK, "Source is not available")
+				h.sendResponse(w, StatusOK, "Source is not available")
 				return
 			}
-			h.sentResponse(w, StatusInternalServerError, err.Error())
+			h.sendResponse(w, StatusInternalServerError, err.Error())
 			return
 		}
 		if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
 			slog.Debug("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
 		}
 		if result.IsThreat {
-			h.sentResponse(w, StatusForbidden, "IP is a threat")
+			h.sendResponse(w, StatusForbidden, "IP is a threat")
 			return
 		}
 	}
@@ -103,11 +103,11 @@ func (h *Handler) checkHanlder(w http.ResponseWriter, r *http.Request) {
 	elapsed := time.Since(start_time)
 	slog.Debug("request processed", "elapsed", elapsed.String())
 
-	h.sentResponse(w, StatusOK, "IP is not a threat")
+	h.sendResponse(w, StatusOK, "IP is not a threat")
 
 }
 
-func (h *Handler) sentResponse(w http.ResponseWriter, status int, data any) {
+func (h *Handler) sendResponse(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {

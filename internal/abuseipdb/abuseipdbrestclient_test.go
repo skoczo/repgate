@@ -9,11 +9,11 @@ import (
 
 func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
 	tests := []struct {
-		name                 string
-		responseStatus       int
-		responseBody         string
-		expectedScore        int
-		expectError          bool
+		name           string
+		responseStatus int
+		responseBody   string
+		expectedScore  int
+		expectError    bool
 	}{
 		{
 			name:           "success",
@@ -51,7 +51,7 @@ func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
 			defer server.Close()
 
 			client := NewAbuseIPDBRestClient("test-key")
-			client.AbustIPRestUrl = server.URL + "?ipAddress=%s&maxAgeInDays=90"
+			client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s&maxAgeInDays=90"
 
 			score, err := client.CheckIP("127.0.0.1")
 

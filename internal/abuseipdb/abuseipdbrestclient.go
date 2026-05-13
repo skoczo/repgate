@@ -14,7 +14,7 @@ import (
 
 type AbuseIPDBRestClient struct {
 	APIKey         string
-	AbustIPRestUrl string
+	AbuseIPDBRestUrl string
 	HTTPClient     *http.Client
 	requestGroup   *singleflight.Group
 }
@@ -22,7 +22,7 @@ type AbuseIPDBRestClient struct {
 func NewAbuseIPDBRestClient(apiKey string) *AbuseIPDBRestClient {
 	return &AbuseIPDBRestClient{
 		APIKey:         apiKey,
-		AbustIPRestUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90",
+		AbuseIPDBRestUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90",
 		HTTPClient:     &http.Client{Timeout: 3 * time.Second},
 		requestGroup:   &singleflight.Group{},
 	}
@@ -35,15 +35,15 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 		time=2026-04-30T20:08:39.042Z level=ERROR msg="Error checking IP %s in AbuseIPDBClient: %v" 165.154
 	*/
 	v, err, _ := c.requestGroup.Do(ip, func() (any, error) {
-		u, err := url.Parse(c.AbustIPRestUrl)
+		u, err := url.Parse(c.AbuseIPDBRestUrl)
 		if err != nil {
 			return 0, err
 		}
-		
+
 		q := u.Query()
 		q.Set("ipAddress", ip)
 		u.RawQuery = q.Encode()
-		
+
 		req, err := http.NewRequest("GET", u.String(), nil)
 		req.Header.Set("Key", c.APIKey)
 		req.Header.Set("Accept", "application/json")
