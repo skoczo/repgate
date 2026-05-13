@@ -10,3 +10,7 @@ AbuseIPDB:
   expiration_time: 24h
   confidence_score_threshold: 50 # if the confidence score is greater than this threshold, the IP is considered a threat
   cache_max_size: 1000 # maximum number of entries in the cache
+  circuit_breaker:
+    max_retries: 3
+    cool_down_period: 30s
+    open_on_error: true

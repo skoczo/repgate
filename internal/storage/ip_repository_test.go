@@ -150,6 +150,11 @@ func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 		ExpirationTime           time.Duration `yaml:"expiration_time"`
 		ConfidenceScoreThreshold int           `yaml:"confidence_score_threshold"`
 		CacheMaxSize             int           `yaml:"cache_max_size"`
+		CircuitBreaker           struct {
+			MaxRetries     int           `yaml:"max_retries"`
+			CoolDownPeriod time.Duration `yaml:"cool_down_period"`
+			OpenOnError    bool          `yaml:"open_on_error"`
+		} `yaml:"circuit_breaker"`
 	}{Enabled: true, APIKey: "test", ExpirationTime: 24 * time.Hour, ConfidenceScoreThreshold: 50}})
 	return err, repo, db
 }

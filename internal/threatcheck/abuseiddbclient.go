@@ -2,7 +2,9 @@ package threatcheck
 
 import (
 	"database/sql"
+	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/skoczo/repgate/internal/abuseipdb"
@@ -18,6 +20,10 @@ type AbuseIPDBThreatSource struct {
 	Client  *abuseipdb.AbuseIPDBRestClient
 	Config  *config.Config
 	IPCache *cache.IPCache
+
+	cbMu         sync.Mutex
+	cbFailures   int
+	cbLastFailed time.Time
 }
 
 // initialize ipcache with max size from config
@@ -37,6 +43,32 @@ func (c *AbuseIPDBThreatSource) Name() string {
 
 func (c *AbuseIPDBThreatSource) Enabled() bool {
 	return c.APIKey != ""
+}
+
+func (c *AbuseIPDBThreatSource) allowRequest() bool {
+	c.cbMu.Lock()
+	defer c.cbMu.Unlock()
+
+	if c.cbFailures >= c.Config.AbuseIPDB.CircuitBreaker.MaxRetries {
+		if time.Since(c.cbLastFailed) < c.Config.AbuseIPDB.CircuitBreaker.CoolDownPeriod {
+			return false // Circuit is open
+		}
+		// Half-open: allow request, if it fails cbLastFailed will be updated
+	}
+	return true
+}
+
+func (c *AbuseIPDBThreatSource) recordSuccess() {
+	c.cbMu.Lock()
+	defer c.cbMu.Unlock()
+	c.cbFailures = 0
+}
+
+func (c *AbuseIPDBThreatSource) recordFailure() {
+	c.cbMu.Lock()
+	defer c.cbMu.Unlock()
+	c.cbFailures++
+	c.cbLastFailed = time.Now()
 }
 
 func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
@@ -64,11 +96,24 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 	}
 
 	// if not in cache, check abuseipdb and update cache and database
+	if !c.allowRequest() {
+		slog.Warn("circuit breaker open, skipping abuseipdb request", "ip", ip)
+		if c.Config.AbuseIPDB.CircuitBreaker.OpenOnError {
+			return c.createResult(ip, 0), nil // Fail open, return safe
+		}
+		return ThreatCheckResult{}, errors.New("circuit breaker open")
+	}
+
 	slog.Debug("ip not found in cache, checking abuseipdb", "ip", ip)
 	ip_record, err := c.abuseiddbRequest(ip)
 	if err != nil {
+		c.recordFailure()
+		if c.Config.AbuseIPDB.CircuitBreaker.OpenOnError {
+			return c.createResult(ip, 0), nil // Fail open, return safe
+		}
 		return ThreatCheckResult{}, err
 	}
+	c.recordSuccess()
 
 	c.IPCache.Set(ip, *ip_record)
 	c.Repo.Update(ip_record)
