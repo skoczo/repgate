@@ -10,8 +10,8 @@ permissions:
   packages: write
 
 jobs:
-  release:
-    name: Build and Release
+  build-and-release:
+    name: Build, Dockerize, and Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -27,19 +27,6 @@ jobs:
           mkdir -p bin
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/repgate-linux-amd64 ./cmd/repgate
           # You can add more architectures here if needed
-
-      - name: Create GitHub Release and Upload Artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          files: bin/repgate-linux-amd64
-          generate_release_notes: true
-
-  docker:
-    name: Publish Docker Image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -61,3 +48,17 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Create GitHub Release and Upload Artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/repgate-linux-amd64
+          generate_release_notes: true
+          body: |
+            ### Docker Image 🐳
+            
+            You can pull the Docker image for this release from the GitHub Container Registry:
+            
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
