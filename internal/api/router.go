@@ -43,7 +43,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		elapsed := time.Since(start_time)
-		slog.Info("request completed", "elapsed", elapsed.String())
+		slog.Debug("request completed", "elapsed", elapsed.String())
 	}()
 
 	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
