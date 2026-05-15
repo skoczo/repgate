@@ -4,6 +4,10 @@
 
 # Repgate
 
+<div align="center">
+  <img src="assets/logo.png" alt="Repgate Logo" width="150" />
+</div>
+
 Repgate(reputation gate) is a small Go service for storing and serving IP reputation data over HTTP. It uses Chi for routing and SQLite for lightweight local persistence, which makes it simple to run in development and easy to package in a container.
 
 Especially to be run with cloudflared where client source ip is in the header.

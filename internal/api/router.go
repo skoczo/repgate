@@ -43,7 +43,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		elapsed := time.Since(start_time)
-		slog.Debug("request completed", "elapsed", elapsed.String())
+		slog.Info("request completed", "elapsed", elapsed.String())
 	}()
 
 	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
@@ -95,6 +95,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 			slog.Debug("threat check result", "source", source.Name(), "is_threat", result.IsThreat)
 		}
 		if result.IsThreat {
+			slog.Warn("Threat IP wanted to reach", "ip", ip, "path", r.URL.Path)
 			h.sendResponse(w, StatusForbidden, "IP is a threat")
 			return
 		}
