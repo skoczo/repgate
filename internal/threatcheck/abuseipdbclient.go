@@ -116,7 +116,6 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 	c.recordSuccess()
 
 	c.IPCache.Set(ip, *ip_record)
-	c.Repo.Update(ip_record)
 
 	return c.createResult(ip_record.IP, ip_record.Score), nil
 }

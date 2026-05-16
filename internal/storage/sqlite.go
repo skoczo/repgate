@@ -24,19 +24,15 @@ func OpenSQLiteDB(dbPath string) (*sql.DB, error) {
 
 	slog.Info("database file created", "dbPath", dbPath)
 
-	// Open the SQLite database
-	db, err := sql.Open("sqlite", dbPath)
+	// Open the SQLite database with PRAGMAs in DSN for connection pool reliability
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)", dbPath)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-
-	if _, err := db.Exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("failed to configure database: %w", err)
-	}
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
 
 	if err := db.Ping(); err != nil {
 		db.Close()

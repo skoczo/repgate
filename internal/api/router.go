@@ -5,10 +5,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
@@ -22,10 +26,21 @@ const (
 type Handler struct {
 	threatSources []threatcheck.ThreatSource
 	failOpen      bool
+	metrics       *Metrics
+}
+
+type Metrics struct {
+	RequestCount    *prometheus.CounterVec
+	RequestDuration *prometheus.HistogramVec
+	ThreatCount     *prometheus.CounterVec
 }
 
 func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, timeout time.Duration) http.Handler {
-	h := &Handler{threatSources: threatSources, failOpen: failOpen}
+	h := &Handler{
+		threatSources: threatSources,
+		failOpen:      failOpen,
+		metrics:       GetMetrics(),
+	}
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
@@ -33,6 +48,7 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, timeout 
 	r.Use(middleware.Timeout(timeout))
 
 	r.Get("/check", h.checkHandler)
+	r.Handle("/metrics", promhttp.Handler())
 
 	return r
 }
@@ -44,6 +60,8 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		elapsed := time.Since(start_time)
 		slog.Debug("request completed", "elapsed", elapsed.String())
+		h.metrics.RequestDuration.WithLabelValues(r.Host).Observe(float64(elapsed.Seconds()))
+		h.metrics.RequestCount.WithLabelValues(r.Host).Inc()
 	}()
 
 	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
@@ -96,6 +114,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if result.IsThreat {
 			slog.Warn("Threat IP wanted to reach", "ip", ip, "path", r.URL.Path)
+			h.metrics.ThreatCount.WithLabelValues(r.Host).Inc()
 			h.sendResponse(w, StatusForbidden, "IP is a threat")
 			return
 		}
@@ -114,4 +133,39 @@ func (h *Handler) sendResponse(w http.ResponseWriter, status int, data any) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Error("failed to encode response", "error", err)
 	}
+}
+
+var (
+	metricInstance *Metrics
+	metricsSync    sync.Once
+)
+
+func GetMetrics() *Metrics {
+	metricsSync.Do(func() {
+		metricInstance = &Metrics{
+			RequestCount: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Name: "repgate_request_count",
+					Help: "Number of requests",
+				},
+				[]string{"host"},
+			),
+			RequestDuration: promauto.NewHistogramVec(
+				prometheus.HistogramOpts{
+					Name:    "repgate_request_duration_seconds",
+					Help:    "Duration of requests",
+					Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+				},
+				[]string{"host"},
+			),
+			ThreatCount: promauto.NewCounterVec(
+				prometheus.CounterOpts{
+					Name: "repgate_threat_count",
+					Help: "Number of threats",
+				},
+				[]string{"host"},
+			),
+		}
+	})
+	return metricInstance
 }
