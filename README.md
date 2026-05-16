@@ -1,82 +1,150 @@
-# !!!WORK IN PROGRESS, NOT READY YET!!!
 [![codecov](https://codecov.io/gh/skoczo/repgate/graph/badge.svg)](https://codecov.io/gh/skoczo/repgate)
 [![Repgate CI](https://github.com/skoczo/repgate/actions/workflows/go.yml/badge.svg)](https://github.com/adskoczy/repgate/actions/workflows/go.yml)
 
-# Repgate
+# 🛡️ Repgate (Reputation Gate)
 
 <div align="center">
   <img src="assets/logo.png" alt="Repgate Logo" width="150" />
+  <p><em>Secure your infrastructure with real-time IP reputation filtering.</em></p>
 </div>
 
-Repgate(reputation gate) is a small Go service for storing and serving IP reputation data over HTTP. It uses Chi for routing and SQLite for lightweight local persistence, which makes it simple to run in development and easy to package in a container.
+---
 
-Especially to be run with cloudflared where client source ip is in the header.
+**Repgate** is a high-performance, lightweight Go service designed to serve as a middleware gatekeeper for your web applications. It fetches, caches, and serves IP reputation data from **AbuseIPDB**, allowing you to block malicious traffic at the edge (e.g., in Nginx) before it even reaches your backend services.
 
-## Features
-HTTP service written in Go
+It is specifically optimized for environments behind **Cloudflare** or **Nginx**, where client source IPs are passed in headers.
 
-Routing built with Chi, a lightweight and composable router for Go HTTP services
+## ✨ Key Features
 
-SQLite-backed persistence for local development and simple deployments
+- ⚡ **High Performance**: Written in Go with [Chi](https://github.com/go-chi/chi) for minimal overhead.
+- 🗄️ **Smart Caching**: SQLite-backed persistent cache to minimize API calls and ensure fast responses.
+- 🔌 **Seamless Integration**: Designed to work perfectly with Nginx's `auth_request` module.
+- 🛡️ **Resilient Architecture**: Built-in **Circuit Breaker** and configurable **Fail-Open/Fail-Closed** modes.
+- 📊 **Observability**: Native **Prometheus** metrics and structured logging.
+- 🐳 **Docker Ready**: Easy to deploy via Docker and Docker Compose.
+- 🛠️ **Dev Friendly**: Full Dev Container support for VS Code.
 
-SQL-based database initialization and migrations
+---
 
-Dev Container setup for a reproducible VS Code development environment
+## 🏗️ How it Works
 
+Repgate acts as an authorization endpoint. When a request hits your reverse proxy (Nginx):
+1. Nginx sends a sub-request to Repgate's `/check` endpoint.
+2. Repgate identifies the client's real IP (handling Cloudflare/Proxy headers).
+3. **Tiered Caching Check**:
+   - **L1 (In-Memory)**: Checks a fast, thread-safe memory cache for immediate results.
+   - **L2 (SQLite)**: If not in L1, checks the local SQLite database for persistent records.
+4. **API Query**: If not cached, it queries AbuseIPDB, updates both caches, and enforces the confidence threshold.
+5. **Enforcement**: If the IP is malicious, Repgate returns `403 Forbidden`. Otherwise, it returns `200 OK`.
 
-## Requirements
-Go 1.25 or newer if using the latest modernc.org/sqlite, because recent releases of that driver require Go 1.25+.
+---
 
-GNU Make
+## 🚀 Getting Started
 
-VS Code with the Go extension if you want to use the provided Dev Container setup
+### 1. Requirements
+- **Go 1.25+** (Required for the latest `modernc.org/sqlite` driver)
+- **GNU Make**
+- **AbuseIPDB API Key**
 
-Getting Started
-1. Clone the repository
-```
+### 2. Installation
+```bash
 git clone https://github.com/skoczo/repgate.git
 cd repgate
-```
-
-2. Install dependencies
-If you are using a Go toolchain compatible with the latest SQLite driver:
-
-```
-go get modernc.org/sqlite
-go mod tidy
-```
-If your environment is still on an older Go version, pin a compatible driver version instead:
-
-
-```
-go get modernc.org/sqlite@v1.39.1
 go mod tidy
 ```
 
-3. Build the binary
+### 3. Configuration
+Create an `internal-config.yaml` file in the root directory (copying from `config.yaml`):
 
+```yaml
+log_level: info
+fail_open: true # Allow traffic if AbuseIPDB is unreachable
+
+server:
+  port: ":8080"
+  read_timeout: 5s
+  write_timeout: 10s
+
+AbuseIPDB:
+  enabled: true
+  api_key: "YOUR_API_KEY_HERE"
+  expiration_time: 24h
+  confidence_score_threshold: 50 # Block if score > 50
+  cache_max_size: 1000
+  circuit_breaker:
+    max_retries: 3
+    cool_down_period: 30s
+    open_on_error: true
 ```
+
+### 4. Running
+**Using Make:**
+```bash
 make build
-The build command produces the application binary in bin/repgate.
-```
-
-4. Run the service
-```
 ./bin/repgate
 ```
-## Database and Migrations
-The service uses SQLite through database/sql and the modernc.org/sqlite driver, which is a CGO-free SQLite driver for Go.
 
-The current codebase expects:
+**Using Docker Compose:**
+```bash
+docker-compose -f docker/docker-compose.yml up --build
+```
 
-- a writable database path under data/
+---
 
-- SQL migration files under db/migrations/
+## 🔗 Nginx Integration
 
-When running the app from VS Code, make sure the process starts with the repository root as the working directory. Relative paths such as data/repgate.db and db/migrations/001_init.sql are resolved from the current working directory, not from the location of the .go file.
+Use the `auth_request` module to protect your services:
 
-You should also create internal-config.yaml in main directory. It should be copty of config.yaml but with your configuration. internal-* files are not stored in the repo
+```nginx
+server {
+    listen 80;
 
+    location / {
+        auth_request /_auth;
+        proxy_pass http://your_backend;
+    }
 
-## Dev Container
-The repository includes a Dev Container configuration for VS Code. 
+    location = /_auth {
+        internal;
+        proxy_pass http://repgate:8080/check;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        
+        # Pass real client IP (Cloudflare example)
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header CF-Connecting-IP $http_cf_connecting_ip;
+    }
+}
+```
+
+---
+
+## 📊 Monitoring & Metrics
+
+Repgate exposes Prometheus metrics at `:8080/metrics`:
+
+| Metric | Type | Description |
+| :--- | :--- | :--- |
+| `repgate_request_count` | Counter | Total number of IP checks processed (labeled by host). |
+| `repgate_request_duration_seconds` | Histogram | Latency of requests (labeled by host). |
+| `repgate_threat_count` | Counter | Total number of malicious IPs detected (labeled by host). |
+
+---
+
+## 🛠️ Development
+
+### Database & Migrations
+Repgate uses a CGO-free SQLite driver.
+- **Database Path**: `data/repgate.db`
+- **Migrations**: Found in `db/migrations/`
+
+### Makefile Commands
+- `make build`: Compiles the binary.
+- `make test`: Runs unit tests.
+- `make lint`: Runs golangci-lint.
+- `make docker-build`: Builds the Docker image.
+
+---
+
+## 📄 License
+This project is licensed under the MIT License - see the LICENSE file for details.

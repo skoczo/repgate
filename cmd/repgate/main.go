@@ -99,7 +99,7 @@ func setLogger(logLevel string) {
 		slog.Error("Failed to parse log level", "error", err)
 		os.Exit(1)
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: parsedLevel,
 	}))
 	slog.SetDefault(logger)
