@@ -134,6 +134,45 @@ func TestIPRepositoryDeleteExpiredFailed(t *testing.T) {
 	removeDatabaseFile(t)
 }
 
+func TestIPRepositoryCount(t *testing.T) {
+	_, repo, db := initialize(t)
+	defer removeDatabaseFile(t)
+	defer db.Close()
+
+	// Initial count should be 0
+	count, err := repo.Count()
+	if err != nil {
+		t.Fatalf("expected no error from Count(), got %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected count to be 0, got %d", count)
+	}
+
+	// Insert a record
+	_, err = repo.Update(&model.IPRecord{IP: "1.2.3.4", Status: "threat", Score: 95, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
+	if err != nil {
+		t.Fatalf("failed to insert record: %v", err)
+	}
+
+	count, err = repo.Count()
+	if err != nil {
+		t.Fatalf("expected no error from Count(), got %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected count to be 1, got %d", count)
+	}
+}
+
+func TestIPRepositoryCountFailed(t *testing.T) {
+	_, repo, db := initialize(t)
+	db.Close()
+	_, err := repo.Count()
+	if err == nil {
+		t.Error("expected error from Count() when database is closed, got nil")
+	}
+	removeDatabaseFile(t)
+}
+
 func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 	db, err := OpenSQLiteDB("repgate.db")
 	if err != nil {

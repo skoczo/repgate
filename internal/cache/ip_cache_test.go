@@ -111,3 +111,105 @@ func TestIPCacheRemove(t *testing.T) {
 		}
 	}
 }
+
+func TestIPCacheSize(t *testing.T) {
+	cache := NewIPCache(42)
+	if cache.Size() != 42 {
+		t.Errorf("expected size 42, got %d", cache.Size())
+	}
+}
+
+func TestIPCacheNumOfEntries(t *testing.T) {
+	cache := NewIPCache(10)
+	if cache.NumOfEntries() != 0 {
+		t.Errorf("expected 0 entries, got %d", cache.NumOfEntries())
+	}
+
+	cache.Set("1.1.1.1", model.IPRecord{IP: "1.1.1.1", Status: "safe"})
+	cache.Set("2.2.2.2", model.IPRecord{IP: "2.2.2.2", Status: "safe"})
+
+	if cache.NumOfEntries() != 2 {
+		t.Errorf("expected 2 entries, got %d", cache.NumOfEntries())
+	}
+
+	cache.Remove("1.1.1.1")
+	if cache.NumOfEntries() != 1 {
+		t.Errorf("expected 1 entry, got %d", cache.NumOfEntries())
+	}
+}
+
+func TestIPCacheThreatCountAndLruEviction(t *testing.T) {
+	cache := NewIPCache(2)
+	if cache.ThreatCount() != 0 {
+		t.Errorf("expected 0 threat count, got %d", cache.ThreatCount())
+	}
+
+	// 1. Add threat IP
+	cache.Set("1.1.1.1", model.IPRecord{IP: "1.1.1.1", Status: "threat"})
+	if cache.ThreatCount() != 1 {
+		t.Errorf("expected 1 threat count, got %d", cache.ThreatCount())
+	}
+
+	// 2. Add safe IP
+	cache.Set("2.2.2.2", model.IPRecord{IP: "2.2.2.2", Status: "safe"})
+	if cache.ThreatCount() != 1 {
+		t.Errorf("expected 1 threat count, got %d", cache.ThreatCount())
+	}
+
+	// 3. Update threat to safe
+	cache.Set("1.1.1.1", model.IPRecord{IP: "1.1.1.1", Status: "safe"})
+	if cache.ThreatCount() != 0 {
+		t.Errorf("expected 0 threat count, got %d", cache.ThreatCount())
+	}
+
+	// 4. Update safe to threat
+	cache.Set("1.1.1.1", model.IPRecord{IP: "1.1.1.1", Status: "threat"})
+	if cache.ThreatCount() != 1 {
+		t.Errorf("expected 1 threat count, got %d", cache.ThreatCount())
+	}
+
+	// 5. Trigger LRU eviction of a threat (since size limit is 2, 2.2.2.2 is safe, 1.1.1.1 is threat, let's access 2.2.2.2 so 1.1.1.1 is evicted when adding 3.3.3.3)
+	_, _ = cache.Get("2.2.2.2") // MRU is now 2.2.2.2, LRU is 1.1.1.1
+	cache.Set("3.3.3.3", model.IPRecord{IP: "3.3.3.3", Status: "safe"}) // This evicts 1.1.1.1 (threat)
+	if cache.ThreatCount() != 0 {
+		t.Errorf("expected 0 threat count after threat eviction, got %d", cache.ThreatCount())
+	}
+
+	// 6. Test eviction of safe record when threat is MRU
+	cache.Set("4.4.4.4", model.IPRecord{IP: "4.4.4.4", Status: "threat"}) // Cache contains 3.3.3.3 (safe) and 4.4.4.4 (threat). MRU is 4.4.4.4, LRU is 3.3.3.3
+	if cache.ThreatCount() != 1 {
+		t.Errorf("expected 1 threat count, got %d", cache.ThreatCount())
+	}
+	cache.Set("5.5.5.5", model.IPRecord{IP: "5.5.5.5", Status: "safe"}) // Evicts 3.3.3.3 (safe). Cache has 4.4.4.4 (threat) and 5.5.5.5 (safe).
+	if cache.ThreatCount() != 1 {
+		t.Errorf("expected 1 threat count after safe eviction, got %d", cache.ThreatCount())
+	}
+}
+
+func TestIPCacheRemoveExpired(t *testing.T) {
+	cache := NewIPCache(10)
+	now := time.Now()
+
+	cache.Set("1.1.1.1", model.IPRecord{IP: "1.1.1.1", Status: "threat", ExpiresAt: now.Add(-1 * time.Minute)})
+	cache.Set("2.2.2.2", model.IPRecord{IP: "2.2.2.2", Status: "safe", ExpiresAt: now.Add(10 * time.Minute)})
+	cache.Set("3.3.3.3", model.IPRecord{IP: "3.3.3.3", Status: "threat", ExpiresAt: now.Add(-5 * time.Minute)})
+
+	if cache.ThreatCount() != 2 {
+		t.Errorf("expected 2 threats, got %d", cache.ThreatCount())
+	}
+	if cache.NumOfEntries() != 3 {
+		t.Errorf("expected 3 entries, got %d", cache.NumOfEntries())
+	}
+
+	cache.RemoveExpired(now)
+
+	if cache.NumOfEntries() != 1 {
+		t.Errorf("expected 1 entry left, got %d", cache.NumOfEntries())
+	}
+	if cache.ThreatCount() != 0 {
+		t.Errorf("expected 0 threats left, got %d", cache.ThreatCount())
+	}
+	if _, exists := cache.Get("2.2.2.2"); !exists {
+		t.Error("expected 2.2.2.2 to still exist in cache")
+	}
+}

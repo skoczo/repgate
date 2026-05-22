@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/config"
+	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/storage"
 	_ "modernc.org/sqlite"
@@ -244,5 +245,49 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	_, err = client.CheckIP("10.0.0.6")
 	if err == nil || err.Error() == "circuit breaker open" {
 		t.Fatalf("expected regular API error as circuit is closed, got: %v", err)
+	}
+}
+
+func TestAbuseIPDBClient_CleanExpiredAndMetrics(t *testing.T) {
+	db, dbPath := setupTestDB(t)
+	defer db.Close()
+	defer os.Remove(dbPath)
+
+	cfg := &config.Config{
+		LogLevel: "debug",
+		FailOpen: false,
+	}
+	cfg.AbuseIPDB.Enabled = true
+	cfg.AbuseIPDB.APIKey = "test-key"
+	cfg.AbuseIPDB.ConfidenceScoreThreshold = 90
+	cfg.AbuseIPDB.CacheMaxSize = 10
+	cfg.AbuseIPDB.ExpirationTime = 1 * time.Hour
+
+	repo := storage.NewIPRepository(db, cfg)
+	client := NewAbuseIPDBClient(cfg, repo)
+
+	// Test SetMetrics
+	m := metrics.GetMetrics()
+	client.SetMetrics(m)
+	if client.metrics != m {
+		t.Error("expected metrics to be set")
+	}
+
+	// Test CleanExpired
+	now := time.Now()
+	client.IPCache.Set("1.1.1.1", model.IPRecord{IP: "1.1.1.1", Status: "threat", ExpiresAt: now.Add(-1 * time.Minute)})
+	client.IPCache.Set("2.2.2.2", model.IPRecord{IP: "2.2.2.2", Status: "safe", ExpiresAt: now.Add(10 * time.Minute)})
+
+	if client.IPCache.NumOfEntries() != 2 {
+		t.Errorf("expected 2 cached items, got %d", client.IPCache.NumOfEntries())
+	}
+
+	client.CleanExpired(now)
+
+	if client.IPCache.NumOfEntries() != 1 {
+		t.Errorf("expected 1 cached item left, got %d", client.IPCache.NumOfEntries())
+	}
+	if _, exists := client.IPCache.Get("2.2.2.2"); !exists {
+		t.Error("expected 2.2.2.2 to remain in cache")
 	}
 }
