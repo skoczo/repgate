@@ -5,14 +5,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/netip"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
@@ -26,20 +24,14 @@ const (
 type Handler struct {
 	threatSources []threatcheck.ThreatSource
 	failOpen      bool
-	metrics       *Metrics
-}
-
-type Metrics struct {
-	RequestCount    *prometheus.CounterVec
-	RequestDuration *prometheus.HistogramVec
-	ThreatCount     *prometheus.CounterVec
+	metrics       *metrics.Metrics
 }
 
 func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, timeout time.Duration) http.Handler {
 	h := &Handler{
 		threatSources: threatSources,
 		failOpen:      failOpen,
-		metrics:       GetMetrics(),
+		metrics:       metrics.GetMetrics(),
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
@@ -47,21 +39,39 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, timeout 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Timeout(timeout))
 
+	for _, source := range h.threatSources {
+		source.SetMetrics(h.metrics)
+	}
+
 	r.Get("/check", h.checkHandler)
 	r.Handle("/metrics", promhttp.Handler())
 
 	return r
 }
 
+func getTargetHost(r *http.Request) string {
+	if target := r.Header.Get("X-Real-Target"); target != "" {
+		return target
+	}
+	if host := r.Header.Get("X-Forwarded-Host"); host != "" {
+		return host
+	}
+	if host := r.Header.Get("X-Original-Host"); host != "" {
+		return host
+	}
+	return r.Host
+}
+
 func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 	// log time taken to process the request in Us
 	start_time := time.Now()
+	targetHost := getTargetHost(r)
 
 	defer func() {
 		elapsed := time.Since(start_time)
 		slog.Debug("request completed", "elapsed", elapsed.String())
-		h.metrics.RequestDuration.WithLabelValues(r.Host).Observe(float64(elapsed.Seconds()))
-		h.metrics.RequestCount.WithLabelValues(r.Host).Inc()
+		h.metrics.RequestDuration.WithLabelValues(targetHost).Observe(float64(elapsed.Seconds()))
+		h.metrics.RequestCount.WithLabelValues(targetHost).Inc()
 	}()
 
 	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
@@ -73,6 +83,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 			slog.String("cf_connecting_ip", r.Header.Get("CF-Connecting-IP")),
 			slog.String("user_agent", r.UserAgent()),
 			slog.String("host", r.Host),
+			slog.String("target_host", targetHost),
 		}
 		if originalURI := r.Header.Get("X-Original-URI"); originalURI != "" {
 			debugFields = append(debugFields, slog.String("original_uri", originalURI))
@@ -125,8 +136,8 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 			if targetPath == "" {
 				targetPath = r.URL.Path
 			}
-			slog.Warn("Threat IP wanted to reach", "ip", ip, "host", r.Host, "path", targetPath)
-			h.metrics.ThreatCount.WithLabelValues(r.Host).Inc()
+			slog.Warn("Threat IP wanted to reach", "ip", ip, "host", targetHost, "path", targetPath)
+			h.metrics.ThreatCount.WithLabelValues(targetHost).Inc()
 			h.sendResponse(w, StatusForbidden, "IP is a threat")
 			return
 		}
@@ -145,39 +156,4 @@ func (h *Handler) sendResponse(w http.ResponseWriter, status int, data any) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Error("failed to encode response", "error", err)
 	}
-}
-
-var (
-	metricInstance *Metrics
-	metricsSync    sync.Once
-)
-
-func GetMetrics() *Metrics {
-	metricsSync.Do(func() {
-		metricInstance = &Metrics{
-			RequestCount: promauto.NewCounterVec(
-				prometheus.CounterOpts{
-					Name: "repgate_request_count",
-					Help: "Number of requests",
-				},
-				[]string{"host"},
-			),
-			RequestDuration: promauto.NewHistogramVec(
-				prometheus.HistogramOpts{
-					Name:    "repgate_request_duration_seconds",
-					Help:    "Duration of requests",
-					Buckets: []float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
-				},
-				[]string{"host"},
-			),
-			ThreatCount: promauto.NewCounterVec(
-				prometheus.CounterOpts{
-					Name: "repgate_threat_count",
-					Help: "Number of threats",
-				},
-				[]string{"host"},
-			),
-		}
-	})
-	return metricInstance
 }

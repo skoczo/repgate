@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
@@ -15,6 +16,8 @@ type mockThreatSource struct {
 	enabled bool
 	result  threatcheck.ThreatCheckResult
 	err     error
+
+	metrics *metrics.Metrics
 }
 
 func (m *mockThreatSource) Name() string  { return m.name }
@@ -23,6 +26,9 @@ func (m *mockThreatSource) CheckIP(ip string) (threatcheck.ThreatCheckResult, er
 	return m.result, m.err
 }
 func (m *mockThreatSource) CleanExpired(now time.Time) {}
+func (m *mockThreatSource) SetMetrics(metrics *metrics.Metrics) {
+	m.metrics = metrics
+}
 
 func TestHandler_checkHanlder(t *testing.T) {
 	tests := []struct {

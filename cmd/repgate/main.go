@@ -14,6 +14,7 @@ import (
 
 	"github.com/skoczo/repgate/internal/api"
 	"github.com/skoczo/repgate/internal/config"
+	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/storage"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
@@ -43,6 +44,12 @@ func main() {
 	// build threat sources based on config
 	repo := storage.NewIPRepository(db, cfg)
 	threatSources := buildThreadSources(cfg, repo)
+
+	if count, err := repo.Count(); err == nil {
+		metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
+	} else {
+		slog.Error("Failed to get initial database record count", "error", err)
+	}
 
 	// start background worker to periodically clean expired records from db and caches
 	go startCleanupWorker(repo, threatSources)
@@ -85,6 +92,10 @@ func startCleanupWorker(repo *storage.IPRepository, sources []threatcheck.Threat
 		now := time.Now()
 		if err := repo.DeleteExpired(now); err != nil {
 			slog.Error("Failed to delete expired IP records from repository", "error", err)
+		} else {
+			if count, err := repo.Count(); err == nil {
+				metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
+			}
 		}
 
 		for _, source := range sources {

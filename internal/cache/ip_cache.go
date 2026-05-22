@@ -15,17 +15,19 @@ type CacheEntry struct {
 }
 
 type IPCache struct {
-	mu      sync.RWMutex
-	cache   map[string]*CacheEntry
-	lru     *list.List
-	maxSize int
+	mu          sync.RWMutex
+	cache       map[string]*CacheEntry
+	lru         *list.List
+	maxSize     int
+	threatCount int
 }
 
 func NewIPCache(maxSize int) *IPCache {
 	return &IPCache{
-		cache:   make(map[string]*CacheEntry),
-		lru:     list.New(),
-		maxSize: maxSize,
+		cache:       make(map[string]*CacheEntry),
+		lru:         list.New(),
+		maxSize:     maxSize,
+		threatCount: 0,
 	}
 }
 
@@ -48,6 +50,12 @@ func (c *IPCache) Set(ip string, record model.IPRecord) {
 
 	if entry, exists := c.cache[ip]; exists {
 		// Update existing entry
+		if entry.record.Status == "threat" && record.Status != "threat" {
+			c.threatCount--
+		} else if entry.record.Status != "threat" && record.Status == "threat" {
+			c.threatCount++
+		}
+		
 		entry.record = record
 		entry.timestamp = time.Now()
 		c.lru.MoveToFront(entry.element)
@@ -60,6 +68,9 @@ func (c *IPCache) Set(ip string, record model.IPRecord) {
 	}
 
 	// Add new entry
+	if record.Status == "threat" {
+		c.threatCount++
+	}
 	element := c.lru.PushFront(ip)
 	c.cache[ip] = &CacheEntry{
 		record:    record,
@@ -73,6 +84,9 @@ func (c *IPCache) Remove(ip string) {
 	defer c.mu.Unlock()
 
 	if entry, exists := c.cache[ip]; exists {
+		if entry.record.Status == "threat" {
+			c.threatCount--
+		}
 		c.lru.Remove(entry.element)
 		delete(c.cache, ip)
 	}
@@ -83,7 +97,12 @@ func (c *IPCache) evictLRU() {
 	element := c.lru.Back()
 	if element != nil {
 		ip := element.Value.(string)
-		delete(c.cache, ip)
+		if entry, exists := c.cache[ip]; exists {
+			if entry.record.Status == "threat" {
+				c.threatCount--
+			}
+			delete(c.cache, ip)
+		}
 		c.lru.Remove(element)
 	}
 }
@@ -94,8 +113,28 @@ func (c *IPCache) RemoveExpired(now time.Time) {
 
 	for ip, entry := range c.cache {
 		if entry.record.ExpiresAt.Before(now) {
+			if entry.record.Status == "threat" {
+				c.threatCount--
+			}
 			c.lru.Remove(entry.element)
 			delete(c.cache, ip)
 		}
 	}
 }
+
+func (c *IPCache) Size() int {
+	return c.maxSize
+}
+
+func (c *IPCache) NumOfEntries() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.cache)
+}
+
+func (c *IPCache) ThreatCount() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.threatCount
+}
+

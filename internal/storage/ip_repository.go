@@ -81,3 +81,9 @@ func (r *IPRepository) DeleteExpired(expiration time.Time) error {
 	slog.Debug("expired IP records deleted", "count", count)
 	return nil
 }
+
+func (r *IPRepository) Count() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM ip_records").Scan(&count)
+	return count, err
+}

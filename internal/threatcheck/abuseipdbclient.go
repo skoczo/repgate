@@ -10,6 +10,7 @@ import (
 	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/cache"
 	"github.com/skoczo/repgate/internal/config"
+	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/storage"
 )
@@ -24,6 +25,7 @@ type AbuseIPDBThreatSource struct {
 	cbMu         sync.Mutex
 	cbFailures   int
 	cbLastFailed time.Time
+	metrics      *metrics.Metrics
 }
 
 // initialize ipcache with max size from config
@@ -72,6 +74,17 @@ func (c *AbuseIPDBThreatSource) recordFailure() {
 }
 
 func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
+
+	// update metrics in defer
+	defer func() {
+		if c.metrics == nil {
+			return
+		}
+		c.metrics.AbuseIpDbCacheSize.Set(float64(c.IPCache.Size()))
+		c.metrics.AbuseIpDbCacheEntitiesCount.Set(float64(c.IPCache.NumOfEntries()))
+		c.metrics.AbuseIpDbCacheThreatsCount.Set(float64(c.IPCache.ThreatCount()))
+	}()
+
 	// check ip in cache first
 	cached_result, exists := c.IPCache.Get(ip)
 	if exists {
@@ -125,6 +138,10 @@ func cleanExpiredIP(c *AbuseIPDBThreatSource, ip string) {
 	err := c.Repo.Delete(ip)
 	if err != nil {
 		slog.Error("error deleting ip record from cache", "ip", ip, "error", err)
+	} else {
+		if c.metrics != nil {
+			c.metrics.AbuseIpDbDatabaseEntitiesCount.Dec()
+		}
 	}
 	slog.Debug("cached result expired, removed from cache and database", "ip", ip)
 }
@@ -143,6 +160,9 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, er
 	status := "safe"
 	if confidenceScore >= c.Config.AbuseIPDB.ConfidenceScoreThreshold {
 		status = "threat"
+		if c.metrics != nil {
+			c.metrics.AbuseIpDbDatabaseThreatsCount.Inc()
+		}
 	}
 
 	ipRecord := model.IPRecord{
@@ -160,6 +180,10 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, er
 		return nil, err
 	}
 
+	if c.metrics != nil {
+		c.metrics.AbuseIpDbDatabaseEntitiesCount.Inc()
+	}
+
 	return savedRecord, nil
 }
 
@@ -175,4 +199,8 @@ func (c *AbuseIPDBThreatSource) isThread(score int) bool {
 		return true
 	}
 	return false
+}
+
+func (c *AbuseIPDBThreatSource) SetMetrics(m *metrics.Metrics) {
+	c.metrics = m
 }
