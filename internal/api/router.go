@@ -74,25 +74,8 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 		h.metrics.RequestCount.WithLabelValues(targetHost).Inc()
 	}()
 
-	if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
-		debugFields := []any{
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.String("remote_addr", r.RemoteAddr),
-			slog.String("x_client_ip", r.Header.Get("X-Client-IP")),
-			slog.String("cf_connecting_ip", r.Header.Get("CF-Connecting-IP")),
-			slog.String("user_agent", r.UserAgent()),
-			slog.String("host", r.Host),
-			slog.String("target_host", targetHost),
-		}
-		if originalURI := r.Header.Get("X-Original-URI"); originalURI != "" {
-			debugFields = append(debugFields, slog.String("original_uri", originalURI))
-		}
-		if originalMethod := r.Header.Get("X-Original-Method"); originalMethod != "" {
-			debugFields = append(debugFields, slog.String("original_method", originalMethod))
-		}
-		slog.Debug("request received", debugFields...)
-	}
+	// log full message with all the headers
+	slog.Debug("request received", "headers", r.Header)
 
 	// validate if x-client-ip is set and is a valid ip address
 	ip := r.Header.Get("X-Client-IP")

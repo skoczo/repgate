@@ -42,6 +42,7 @@ bench-report: bench
 # tests with coverage in html format
 coverage:
 	go test ./... -covermode=count -coverprofile=coverage.out
+	grep -v "github.com/skoczo/repgate/cmd/" coverage.out > coverage.clean.out && mv coverage.clean.out coverage.out
 	go tool cover -func=coverage.out -o=coverage.func
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage HTML generated: coverage.html"

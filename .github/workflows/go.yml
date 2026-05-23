@@ -32,7 +32,9 @@ jobs:
       run: make test
 
     - name: Test & Coverage
-      run: go test ./... -coverprofile=coverage.out -covermode=atomic
+      run: |
+        go test ./... -coverprofile=coverage.out -covermode=atomic
+        grep -v "github.com/skoczo/repgate/cmd/" coverage.out > coverage.clean.out && mv coverage.clean.out coverage.out
 
     - name: Integration Tests
       env:
