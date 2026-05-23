@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/skoczo/repgate/internal/alerts"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -79,7 +80,7 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 	})
 
 	if err != nil {
-		slog.Error("Error checking IP in AbuseIPDBClient", "error", err)
+		slog.Error("Error checking IP in AbuseIPDBClient", "error", err, "alert_id", alerts.ExternalCheckFailed.ID, "alert_name", alerts.ExternalCheckFailed.Name)
 		return 0, err
 	}
 

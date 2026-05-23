@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/abuseipdb"
+	"github.com/skoczo/repgate/internal/alerts"
 	"github.com/skoczo/repgate/internal/cache"
 	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/metrics"
@@ -110,7 +111,7 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 
 	// if not in cache, check abuseipdb and update cache and database
 	if !c.allowRequest() {
-		slog.Warn("circuit breaker open, skipping abuseipdb request", "ip", ip)
+		slog.Warn("circuit breaker open, skipping abuseipdb request", "ip", ip, "alert_id", alerts.CircuitBreakerTripped.ID, "alert_name", alerts.CircuitBreakerTripped.Name)
 		if c.Config.AbuseIPDB.CircuitBreaker.OpenOnError {
 			return c.createResult(ip, 0), nil // Fail open, return safe
 		}
@@ -176,7 +177,7 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, er
 
 	savedRecord, err := c.Repo.Update(&ipRecord)
 	if err != nil {
-		slog.Error("error saving ip record to database", "ip", ip, "error", err)
+		slog.Error("error saving ip record to database", "ip", ip, "error", err, "alert_id", alerts.DatabaseWriteFailed.ID, "alert_name", alerts.DatabaseWriteFailed.Name)
 		return nil, err
 	}
 

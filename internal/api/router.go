@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/skoczo/repgate/internal/alerts"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
@@ -80,12 +81,12 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 	// validate if x-client-ip is set and is a valid ip address
 	ip := r.Header.Get("X-Client-IP")
 	if ip == "" {
-		slog.Warn("X-Client-IP header is not set")
+		slog.Warn("X-Client-IP header is not set", "alert_id", alerts.ClientIPHeaderMissing.ID, "alert_name", alerts.ClientIPHeaderMissing.Name)
 		h.sendResponse(w, StatusForbidden, "X-Client-IP header is not set")
 		return
 	}
 	if _, err := netip.ParseAddr(ip); err != nil {
-		slog.Warn("X-Client-IP header is not a valid IP address", "ip", ip)
+		slog.Warn("X-Client-IP header is not a valid IP address", "ip", ip, "alert_id", alerts.ClientIPHeaderInvalid.ID, "alert_name", alerts.ClientIPHeaderInvalid.Name)
 		h.sendResponse(w, StatusForbidden, "X-Client-IP header is not a valid IP address")
 		return
 	}
@@ -103,7 +104,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 		result, err := source.CheckIP(ip)
 
 		if err != nil {
-			slog.Error("error checking threat source", "source", source.Name(), "error", err)
+			slog.Error("error checking threat source", "source", source.Name(), "error", err, "alert_id", alerts.ThreatSourceCheckError.ID, "alert_name", alerts.ThreatSourceCheckError.Name)
 			if h.failOpen {
 				h.sendResponse(w, StatusOK, "Source is not available")
 				return
@@ -119,7 +120,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 			if targetPath == "" {
 				targetPath = r.URL.Path
 			}
-			slog.Warn("Threat IP wanted to reach", "ip", ip, "host", targetHost, "path", targetPath)
+			slog.Warn("Threat IP detected", "ip", ip, "host", targetHost, "path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
 			h.metrics.ThreatCount.WithLabelValues(targetHost).Inc()
 			h.sendResponse(w, StatusForbidden, "IP is a threat")
 			return

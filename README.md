@@ -131,6 +131,28 @@ Repgate exposes Prometheus metrics at `:8080/metrics`:
 
 ---
 
+## 🚨 Alerts & Structured Logging
+
+Repgate writes structured logs using Go's `slog` library. When critical security events, client configuration errors, or system anomalies occur, log entries are enriched with `alert_id` (numeric, for dashboarding/querying in Grafana Loki) and `alert_name` (string, for developer readability) fields.
+
+### Alert Classification Schema
+
+- **`1xxx` Series**: Security events (e.g. threat detection, client IP blocks).
+- **`2xxx` Series**: Client/Request configuration errors (e.g. missing/invalid headers).
+- **`3xxx` Series**: System/Dependency errors (e.g. SQLite database or external AbuseIPDB API failures).
+
+| Alert ID | Alert Name (`alert_name`) | Severity | Description |
+| :--- | :--- | :--- | :--- |
+| **`1001`** | `THREAT_DETECTED` | `WARN` | A malicious IP attempted to reach the proxied backend host. |
+| **`2001`** | `CLIENT_IP_HEADER_MISSING` | `WARN` | Request reached `/check` without the `X-Client-IP` header. |
+| **`2002`** | `CLIENT_IP_HEADER_INVALID` | `WARN` | `X-Client-IP` header was not a valid IP address. |
+| **`3001`** | `THREAT_SOURCE_CHECK_FAILED` | `ERROR` | Internal database query or threat check failed. |
+| **`3002`** | `CIRCUIT_BREAKER_TRIPPED` | `WARN` | Cache miss occurred but AbuseIPDB request was skipped (circuit open). |
+| **`3003`** | `DATABASE_WRITE_FAILED` | `ERROR` | Failed to persist check result to SQLite cache database. |
+| **`3004`** | `EXTERNAL_CHECK_FAILED` | `ERROR` | Network/API failure during HTTP check request to AbuseIPDB. |
+
+---
+
 ## 🛠️ Development
 
 ### Database & Migrations
