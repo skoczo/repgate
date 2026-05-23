@@ -12,7 +12,7 @@ type Metrics struct {
 	RequestDuration                *prometheus.HistogramVec
 	ThreatCount                    *prometheus.CounterVec
 	AbuseIpDbDatabaseEntitiesCount prometheus.Gauge
-	AbuseIpDbDatabaseThreatsCount  prometheus.Counter
+	AbuseIpDbDatabaseThreatsCount  prometheus.Gauge
 	AbuseIpDbCacheEntitiesCount    prometheus.Gauge
 	AbuseIpDbCacheThreatsCount     prometheus.Gauge
 	AbuseIpDbCacheSize             prometheus.Gauge
@@ -58,7 +58,7 @@ func GetMetrics() *Metrics {
 				Name: "repgate_database_entities_count",
 				Help: "Number of entities in database",
 			}),
-			AbuseIpDbDatabaseThreatsCount: promauto.NewCounter(prometheus.CounterOpts{
+			AbuseIpDbDatabaseThreatsCount: promauto.NewGauge(prometheus.GaugeOpts{
 				Name: "repgate_database_threats_count",
 				Help: "Number of threats in database",
 			}),

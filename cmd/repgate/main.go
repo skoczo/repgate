@@ -51,6 +51,12 @@ func main() {
 		slog.Error("Failed to get initial database record count", "error", err)
 	}
 
+	if threatCount, err := repo.ThreatCount(); err == nil {
+		metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
+	} else {
+		slog.Error("Failed to get initial database threat count", "error", err)
+	}
+
 	// start background worker to periodically clean expired records from db and caches
 	go startCleanupWorker(repo, threatSources)
 
@@ -95,6 +101,9 @@ func startCleanupWorker(repo *storage.IPRepository, sources []threatcheck.Threat
 		} else {
 			if count, err := repo.Count(); err == nil {
 				metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
+			}
+			if threatCount, err := repo.ThreatCount(); err == nil {
+				metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
 			}
 		}
 

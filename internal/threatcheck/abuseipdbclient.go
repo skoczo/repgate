@@ -135,6 +135,7 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 }
 
 func cleanExpiredIP(c *AbuseIPDBThreatSource, ip string) {
+	record, exists := c.IPCache.Get(ip)
 	c.IPCache.Remove(ip)
 	err := c.Repo.Delete(ip)
 	if err != nil {
@@ -142,6 +143,9 @@ func cleanExpiredIP(c *AbuseIPDBThreatSource, ip string) {
 	} else {
 		if c.metrics != nil {
 			c.metrics.AbuseIpDbDatabaseEntitiesCount.Dec()
+			if exists && record.Status == "threat" {
+				c.metrics.AbuseIpDbDatabaseThreatsCount.Dec()
+			}
 		}
 	}
 	slog.Debug("cached result expired, removed from cache and database", "ip", ip)
@@ -149,6 +153,11 @@ func cleanExpiredIP(c *AbuseIPDBThreatSource, ip string) {
 
 func (c *AbuseIPDBThreatSource) CleanExpired(now time.Time) {
 	c.IPCache.RemoveExpired(now)
+	if c.metrics != nil {
+		c.metrics.AbuseIpDbCacheSize.Set(float64(c.IPCache.Size()))
+		c.metrics.AbuseIpDbCacheEntitiesCount.Set(float64(c.IPCache.NumOfEntries()))
+		c.metrics.AbuseIpDbCacheThreatsCount.Set(float64(c.IPCache.ThreatCount()))
+	}
 }
 
 func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, error) {

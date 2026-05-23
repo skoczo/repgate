@@ -148,8 +148,22 @@ func TestIPRepositoryCount(t *testing.T) {
 		t.Errorf("expected count to be 0, got %d", count)
 	}
 
-	// Insert a record
+	threatCount, err := repo.ThreatCount()
+	if err != nil {
+		t.Fatalf("expected no error from ThreatCount(), got %v", err)
+	}
+	if threatCount != 0 {
+		t.Errorf("expected threatCount to be 0, got %d", threatCount)
+	}
+
+	// Insert a threat record
 	_, err = repo.Update(&model.IPRecord{IP: "1.2.3.4", Status: "threat", Score: 95, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
+	if err != nil {
+		t.Fatalf("failed to insert record: %v", err)
+	}
+
+	// Insert a safe record
+	_, err = repo.Update(&model.IPRecord{IP: "1.2.3.5", Status: "safe", Score: 10, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
 	if err != nil {
 		t.Fatalf("failed to insert record: %v", err)
 	}
@@ -158,8 +172,16 @@ func TestIPRepositoryCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error from Count(), got %v", err)
 	}
-	if count != 1 {
-		t.Errorf("expected count to be 1, got %d", count)
+	if count != 2 {
+		t.Errorf("expected count to be 2, got %d", count)
+	}
+
+	threatCount, err = repo.ThreatCount()
+	if err != nil {
+		t.Fatalf("expected no error from ThreatCount(), got %v", err)
+	}
+	if threatCount != 1 {
+		t.Errorf("expected threatCount to be 1, got %d", threatCount)
 	}
 }
 

@@ -87,3 +87,9 @@ func (r *IPRepository) Count() (int, error) {
 	err := r.db.QueryRow("SELECT COUNT(*) FROM ip_records").Scan(&count)
 	return count, err
 }
+
+func (r *IPRepository) ThreatCount() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM ip_records WHERE status = 'threat'").Scan(&count)
+	return count, err
+}
