@@ -71,14 +71,27 @@ func main() {
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
 	}
-	setSignalHandler(db, server)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	slog.Info("Server is listening on " + cfg.Server.Port)
+	go func() {
+		slog.Info("Server is listening on " + cfg.Server.Port)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("Server failed to start", "error", err)
-		os.Exit(1)
+	<-sigChan
+	slog.Info("Shutting down server...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
 	}
+	slog.Info("Server exited")
 }
 
 func buildThreadSources(cfg *config.Config, repo *storage.IPRepository) []threatcheck.ThreatSource {
@@ -147,18 +160,4 @@ func createDBAndRunDBMigrations() *sql.DB {
 	return db
 }
 
-func setSignalHandler(db *sql.DB, server *http.Server) {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		slog.Info("Shutting down server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
-			slog.Error("Server forced to shutdown", "error", err)
-		}
-		slog.Info("Server exited")
-		os.Exit(0)
-	}()
-}
+
