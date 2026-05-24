@@ -98,7 +98,7 @@ func TestHandler_checkHanlder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(tt.threatSources, tt.failOpen, 5*time.Second)
+			router := NewRouter(tt.threatSources, tt.failOpen, false, 5*time.Second)
 
 			req := httptest.NewRequest("GET", "/check", nil)
 			if tt.name == "invalid X-Client-IP" {

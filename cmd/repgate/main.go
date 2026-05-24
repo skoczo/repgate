@@ -66,7 +66,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Server.Port,
-		Handler:           api.NewRouter(threatSources, cfg.FailOpen, cfg.Server.ReadTimeout),
+		Handler:           api.NewRouter(threatSources, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,

@@ -25,13 +25,15 @@ const (
 type Handler struct {
 	threatSources []threatcheck.ThreatSource
 	failOpen      bool
+	logSafeIPs    bool
 	metrics       *metrics.Metrics
 }
 
-func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, timeout time.Duration) http.Handler {
+func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, logSafeIPs bool, timeout time.Duration) http.Handler {
 	h := &Handler{
 		threatSources: threatSources,
 		failOpen:      failOpen,
+		logSafeIPs:    logSafeIPs,
 		metrics:       metrics.GetMetrics(),
 	}
 	r := chi.NewRouter()
@@ -129,6 +131,14 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 
 	elapsed := time.Since(start_time)
 	slog.Debug("request processed", "elapsed", elapsed.String())
+
+	if h.logSafeIPs {
+		targetPath := r.Header.Get("X-Original-URI")
+		if targetPath == "" {
+			targetPath = r.URL.Path
+		}
+		slog.Info("Safe IP detected", "ip", ip, "target_host", targetHost, "target_path", targetPath)
+	}
 
 	h.sendResponse(w, StatusOK, "IP is not a threat")
 
