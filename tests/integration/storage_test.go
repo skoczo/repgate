@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"context"
 	"database/sql"
 	"path/filepath"
 	"testing"
@@ -49,14 +50,14 @@ func TestIntegration_IPRepository(t *testing.T) {
 		Source:    "IntegrationTest",
 	}
 
-	saved, err := repo.Update(record)
+	saved, err := repo.Update(context.Background(), record)
 	require.NoError(t, err)
 	require.NotNil(t, saved)
 	assert.Equal(t, "192.168.100.1", saved.IP)
 	assert.Equal(t, "threat", saved.Status)
 
 	// 2. Test Get
-	found, err := repo.GetByIp("192.168.100.1")
+	found, err := repo.GetByIp(context.Background(), "192.168.100.1")
 	require.NoError(t, err)
 	require.NotNil(t, found)
 	assert.Equal(t, 99, found.Score)
@@ -64,17 +65,17 @@ func TestIntegration_IPRepository(t *testing.T) {
 	// 3. Test Update (Overwrite existing)
 	found.Score = 50
 	found.Status = "safe"
-	updated, err := repo.Update(found)
+	updated, err := repo.Update(context.Background(), found)
 	require.NoError(t, err)
 	assert.Equal(t, 50, updated.Score)
 	assert.Equal(t, "safe", updated.Status)
 
 	// 4. Test Delete
-	err = repo.Delete("192.168.100.1")
+	err = repo.Delete(context.Background(), "192.168.100.1")
 	require.NoError(t, err)
 
 	// Ensure deleted
-	missing, err := repo.GetByIp("192.168.100.1")
+	missing, err := repo.GetByIp(context.Background(), "192.168.100.1")
 	assert.ErrorIs(t, err, sql.ErrNoRows, "Expected ErrNoRows after deletion")
 	assert.Nil(t, missing)
 }

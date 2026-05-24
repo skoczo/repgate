@@ -1,6 +1,7 @@
 package threatcheck
 
 import (
+	"context"
 	"time"
 
 	"github.com/skoczo/repgate/internal/metrics"
@@ -9,7 +10,7 @@ import (
 type ThreatSource interface {
 	Name() string
 	Enabled() bool
-	CheckIP(ip string) (ThreatCheckResult, error)
+	CheckIP(ctx context.Context, ip string) (ThreatCheckResult, error)
 	CleanExpired(now time.Time)
 	SetMetrics(m *metrics.Metrics)
 }

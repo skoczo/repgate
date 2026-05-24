@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ type mockThreatSource struct {
 
 func (m *mockThreatSource) Name() string  { return m.name }
 func (m *mockThreatSource) Enabled() bool { return m.enabled }
-func (m *mockThreatSource) CheckIP(ip string) (threatcheck.ThreatCheckResult, error) {
+func (m *mockThreatSource) CheckIP(ctx context.Context, ip string) (threatcheck.ThreatCheckResult, error) {
 	return m.result, m.err
 }
 func (m *mockThreatSource) CleanExpired(now time.Time) {}

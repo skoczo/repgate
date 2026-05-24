@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -19,9 +20,9 @@ func NewIPRepository(db *sql.DB, cfg *config.Config) *IPRepository {
 	return &IPRepository{db: db, expirationTime: cfg.AbuseIPDB.ExpirationTime}
 }
 
-func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
+func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord, error) {
 	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ? and expires_at > ?`
-	row := r.db.QueryRow(query, ip, time.Now())
+	row := r.db.QueryRowContext(ctx, query, ip, time.Now())
 
 	var record model.IPRecord
 	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
@@ -35,7 +36,7 @@ func (r *IPRepository) GetByIp(ip string) (*model.IPRecord, error) {
 }
 
 // update method should be used for saving new records and updating existing records
-func (r *IPRepository) Update(record *model.IPRecord) (*model.IPRecord, error) {
+func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) (*model.IPRecord, error) {
 	query := `
 	INSERT INTO ip_records
 	VALUES (?, ?, ?, ?, ?, ?)
@@ -46,30 +47,30 @@ func (r *IPRepository) Update(record *model.IPRecord) (*model.IPRecord, error) {
 		checked_at=excluded.checked_at,
 		expires_at=excluded.expires_at
 	`
-	_, err := r.db.Exec(query, record.IP, record.Status, record.Score, record.Source, time.Now(), time.Now().Add(r.expirationTime))
+	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, time.Now(), time.Now().Add(r.expirationTime))
 	if err != nil {
 		return nil, fmt.Errorf("failed to save IP record: %w", err)
 	}
 
-	dbRecord, err := r.GetByIp(record.IP)
+	dbRecord, err := r.GetByIp(ctx, record.IP)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get IP record after saving: %w", err)
 	}
 	return dbRecord, nil
 }
 
-func (r *IPRepository) Delete(ip string) error {
+func (r *IPRepository) Delete(ctx context.Context, ip string) error {
 	query := `DELETE FROM ip_records WHERE ip = ?`
-	_, err := r.db.Exec(query, ip)
+	_, err := r.db.ExecContext(ctx, query, ip)
 	if err != nil {
 		return fmt.Errorf("failed to delete IP record: %w", err)
 	}
 	return nil
 }
 
-func (r *IPRepository) DeleteExpired(expiration time.Time) error {
+func (r *IPRepository) DeleteExpired(ctx context.Context, expiration time.Time) error {
 	query := `DELETE FROM ip_records WHERE expires_at <= ?`
-	result, err := r.db.Exec(query, expiration)
+	result, err := r.db.ExecContext(ctx, query, expiration)
 	if err != nil {
 		return fmt.Errorf("failed to delete expired IP records: %w", err)
 	}
@@ -82,14 +83,14 @@ func (r *IPRepository) DeleteExpired(expiration time.Time) error {
 	return nil
 }
 
-func (r *IPRepository) Count() (int, error) {
+func (r *IPRepository) Count(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRow("SELECT COUNT(*) FROM ip_records").Scan(&count)
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ip_records").Scan(&count)
 	return count, err
 }
 
-func (r *IPRepository) ThreatCount() (int, error) {
+func (r *IPRepository) ThreatCount(ctx context.Context) (int, error) {
 	var count int
-	err := r.db.QueryRow("SELECT COUNT(*) FROM ip_records WHERE status = 'threat'").Scan(&count)
+	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ip_records WHERE status = 'threat'").Scan(&count)
 	return count, err
 }

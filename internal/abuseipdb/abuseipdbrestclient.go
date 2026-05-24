@@ -1,6 +1,7 @@
 package abuseipdb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,13 +30,13 @@ func NewAbuseIPDBRestClient(apiKey string) *AbuseIPDBRestClient {
 	}
 }
 
-func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
+func (c *AbuseIPDBRestClient) CheckIP(ctx context.Context, ip string) (int, error) {
 	/*
 		example abusedb response
-		{"data":{"ipAddress":"165.154.23.177","isPublic":true,"ipVersion":4,"isWhitelisted":false,"abuseConfidenceScore":100,"countryCode":"HK","usageType":"Data Center\/Web Hosting\/Transit","isp":"UCLOUD INFORMATION TECHNOLOGY (HK) LIMITED","domain":"ucloud.cn","hostnames":[],"isTor":false,"totalReports":2067,"numDistinctUsers":165,"lastReportedAt":"2026-04-30T20:02:20+00:00"}}
+		{"data":{"ipAddress":"165.154.23.177","isPublic":true,"ipVersion":4,"isWhitelisted":false,"abuseConfidenceScore":100,"countryCode":"HK","usageType":"Data Center\/Web Hosting\/Transit","isp":"UCLOUD INFORMATION TECHNOLOGY (HK) LIMITED","domain":"ucloud.cn","hostnames":[],"isTor":false,"totalReports":2067,"numDistinctUsers":165,"lastReportedAt":"2026-04-30T20:02:20+00:00"}
 		time=2026-04-30T20:08:39.042Z level=ERROR msg="Error checking IP %s in AbuseIPDBClient: %v" 165.154
 	*/
-	v, err, _ := c.requestGroup.Do(ip, func() (any, error) {
+	ch := c.requestGroup.DoChan(ip, func() (any, error) {
 		u, err := url.Parse(c.AbuseIPDBRestUrl)
 		if err != nil {
 			return 0, err
@@ -45,7 +46,15 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 		q.Set("ipAddress", ip)
 		u.RawQuery = q.Encode()
 
-		req, err := http.NewRequest("GET", u.String(), nil)
+		// Use a decoupled context with configured HTTP timeout to prevent single request cancels
+		// from aborting shared singleflight HTTP executions for other concurrent waiters.
+		ctxHTTP, cancel := context.WithTimeout(context.Background(), c.HTTPClient.Timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctxHTTP, "GET", u.String(), nil)
+		if err != nil {
+			return 0, err
+		}
 		req.Header.Set("Key", c.APIKey)
 		req.Header.Set("Accept", "application/json")
 
@@ -79,12 +88,15 @@ func (c *AbuseIPDBRestClient) CheckIP(ip string) (int, error) {
 		return result.Data.AbuseConfidenceScore, nil
 	})
 
-	if err != nil {
-		slog.Error("Error checking IP in AbuseIPDBClient", "error", err, "alert_id", alerts.ExternalCheckFailed.ID, "alert_name", alerts.ExternalCheckFailed.Name)
-		return 0, err
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			slog.Error("Error checking IP in AbuseIPDBClient", "error", res.Err, "alert_id", alerts.ExternalCheckFailed.ID, "alert_name", alerts.ExternalCheckFailed.Name)
+			return 0, res.Err
+		}
+		slog.Debug("AbuseIPDB response:", "response", res.Val)
+		return res.Val.(int), nil
 	}
-
-	slog.Debug("AbuseIPDB response:", "response", v)
-
-	return v.(int), nil
 }

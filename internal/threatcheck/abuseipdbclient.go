@@ -1,6 +1,7 @@
 package threatcheck
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -74,7 +75,7 @@ func (c *AbuseIPDBThreatSource) recordFailure() {
 	c.cbLastFailed = time.Now()
 }
 
-func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
+func (c *AbuseIPDBThreatSource) CheckIP(ctx context.Context, ip string) (ThreatCheckResult, error) {
 
 	// update metrics in defer
 	defer func() {
@@ -91,13 +92,13 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 	if exists {
 		slog.Debug("ip found in cache", "ip", ip, "status", cached_result.Status, "score", cached_result.Score)
 		if cached_result.ExpiresAt.Before(time.Now()) {
-			cleanExpiredIP(c, ip)
+			cleanExpiredIP(ctx, c, ip)
 		} else {
 			return c.createResult(cached_result.IP, cached_result.Score), nil
 		}
 	}
 
-	result, err := c.Repo.GetByIp(ip)
+	result, err := c.Repo.GetByIp(ctx, ip)
 	if err != nil && err != sql.ErrNoRows {
 		slog.Error("error reading ip from cache", "ip", ip, "error", err)
 		return ThreatCheckResult{}, err
@@ -119,7 +120,7 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 	}
 
 	slog.Debug("ip not found in cache, checking abuseipdb", "ip", ip)
-	ip_record, err := c.abuseiddbRequest(ip)
+	ip_record, err := c.abuseiddbRequest(ctx, ip)
 	if err != nil {
 		c.recordFailure()
 		if c.Config.AbuseIPDB.CircuitBreaker.OpenOnError {
@@ -134,12 +135,12 @@ func (c *AbuseIPDBThreatSource) CheckIP(ip string) (ThreatCheckResult, error) {
 	return c.createResult(ip_record.IP, ip_record.Score), nil
 }
 
-func cleanExpiredIP(c *AbuseIPDBThreatSource, ip string) {
+func cleanExpiredIP(ctx context.Context, c *AbuseIPDBThreatSource, ip string) {
 	record, exists := c.IPCache.Get(ip)
 	c.IPCache.Remove(ip)
-	err := c.Repo.Delete(ip)
+	err := c.Repo.Delete(ctx, ip)
 	if err != nil {
-		slog.Error("error deleting ip record from cache", "ip", ip, "error", err)
+		slog.Error("error deleting ip record from database", "ip", ip, "error", err)
 	} else {
 		if c.metrics != nil {
 			c.metrics.AbuseIpDbDatabaseEntitiesCount.Dec()
@@ -160,8 +161,8 @@ func (c *AbuseIPDBThreatSource) CleanExpired(now time.Time) {
 	}
 }
 
-func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, error) {
-	confidenceScore, err := c.Client.CheckIP(ip)
+func (c *AbuseIPDBThreatSource) abuseiddbRequest(ctx context.Context, ip string) (*model.IPRecord, error) {
+	confidenceScore, err := c.Client.CheckIP(ctx, ip)
 	if err != nil {
 		slog.Error("error checking ip in abuseipdb", "ip", ip, "error", err)
 		return nil, err
@@ -184,7 +185,7 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ip string) (*model.IPRecord, er
 		ExpiresAt: time.Now().Add(c.Config.AbuseIPDB.ExpirationTime),
 	}
 
-	savedRecord, err := c.Repo.Update(&ipRecord)
+	savedRecord, err := c.Repo.Update(ctx, &ipRecord)
 	if err != nil {
 		slog.Error("error saving ip record to database", "ip", ip, "error", err, "alert_id", alerts.DatabaseWriteFailed.ID, "alert_name", alerts.DatabaseWriteFailed.Name)
 		return nil, err

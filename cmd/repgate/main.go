@@ -45,13 +45,13 @@ func main() {
 	repo := storage.NewIPRepository(db, cfg)
 	threatSources := buildThreadSources(cfg, repo)
 
-	if count, err := repo.Count(); err == nil {
+	if count, err := repo.Count(context.Background()); err == nil {
 		metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
 	} else {
 		slog.Error("Failed to get initial database record count", "error", err)
 	}
 
-	if threatCount, err := repo.ThreatCount(); err == nil {
+	if threatCount, err := repo.ThreatCount(context.Background()); err == nil {
 		metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
 	} else {
 		slog.Error("Failed to get initial database threat count", "error", err)
@@ -96,13 +96,13 @@ func startCleanupWorker(repo *storage.IPRepository, sources []threatcheck.Threat
 	for {
 		<-ticker.C
 		now := time.Now()
-		if err := repo.DeleteExpired(now); err != nil {
+		if err := repo.DeleteExpired(context.Background(), now); err != nil {
 			slog.Error("Failed to delete expired IP records from repository", "error", err)
 		} else {
-			if count, err := repo.Count(); err == nil {
+			if count, err := repo.Count(context.Background()); err == nil {
 				metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
 			}
-			if threatCount, err := repo.ThreatCount(); err == nil {
+			if threatCount, err := repo.ThreatCount(context.Background()); err == nil {
 				metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
 			}
 		}

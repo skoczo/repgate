@@ -101,7 +101,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 		if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
 			slog.Debug("checking threat source", "source", source.Name())
 		}
-		result, err := source.CheckIP(ip)
+		result, err := source.CheckIP(r.Context(), ip)
 
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err, "alert_id", alerts.ThreatSourceCheckError.ID, "alert_name", alerts.ThreatSourceCheckError.Name)
@@ -120,7 +120,7 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 			if targetPath == "" {
 				targetPath = r.URL.Path
 			}
-			slog.Warn("Threat IP detected", "ip", ip, "host", targetHost, "path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
+			slog.Warn("Threat IP detected", "ip", ip, "target_host", targetHost, "target_path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
 			h.metrics.ThreatCount.WithLabelValues(targetHost).Inc()
 			h.sendResponse(w, StatusForbidden, "IP is a threat")
 			return

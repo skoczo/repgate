@@ -1,6 +1,7 @@
 package abuseipdb
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -53,7 +54,7 @@ func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
 			client := NewAbuseIPDBRestClient("test-key")
 			client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s&maxAgeInDays=90"
 
-			score, err := client.CheckIP("127.0.0.1")
+			score, err := client.CheckIP(context.Background(), "127.0.0.1")
 
 			if (err != nil) != tt.expectError {
 				t.Fatalf("expected error: %v, got: %v", tt.expectError, err)

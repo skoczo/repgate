@@ -3,6 +3,7 @@
 package integration
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestIntegration_AbuseIPDBRestClient(t *testing.T) {
 	// Test against a known safe public IP (Google DNS)
 	ip := "8.8.8.8"
 
-	score, err := client.CheckIP(ip)
+	score, err := client.CheckIP(context.Background(), ip)
 
 	require.NoError(t, err, "Expected no error when calling real AbuseIPDB API")
 	// Google DNS should have an extremely low, or 0, abuse confidence score
@@ -31,7 +32,7 @@ func TestIntegration_AbuseIPDBRestClient(t *testing.T) {
 	// test against thread ip
 	ip = "1.2.3.4"
 
-	score, err = client.CheckIP(ip)
+	score, err = client.CheckIP(context.Background(), ip)
 	require.NoError(t, err, "Expected no error when calling real AbuseIPDB API")
 	assert.Greater(t, score, 10, "Expected high abuse score for thread IP")
 }
