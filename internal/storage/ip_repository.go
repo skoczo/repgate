@@ -35,6 +35,20 @@ func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord,
 	return &record, nil
 }
 
+func (r *IPRepository) GetRecord(ctx context.Context, ip string) (*model.IPRecord, error) {
+	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ?`
+	row := r.db.QueryRowContext(ctx, query, ip)
+
+	var record model.IPRecord
+	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to get IP record: %w", err)
+	}
+	return &record, nil
+}
+
 // update method should be used for saving new records and updating existing records
 func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) (*model.IPRecord, error) {
 	query := `

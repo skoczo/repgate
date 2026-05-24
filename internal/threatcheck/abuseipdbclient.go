@@ -171,9 +171,6 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ctx context.Context, ip string)
 	status := "safe"
 	if confidenceScore >= c.Config.AbuseIPDB.ConfidenceScoreThreshold {
 		status = "threat"
-		if c.metrics != nil {
-			c.metrics.AbuseIpDbDatabaseThreatsCount.Inc()
-		}
 	}
 
 	ipRecord := model.IPRecord{
@@ -185,6 +182,12 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ctx context.Context, ip string)
 		ExpiresAt: time.Now().Add(c.Config.AbuseIPDB.ExpirationTime),
 	}
 
+	// Fetch existing record (even if expired) to decide on metric updates
+	existingRecord, err := c.Repo.GetRecord(ctx, ip)
+	if err != nil && err != sql.ErrNoRows {
+		slog.Error("error reading existing record from database", "ip", ip, "error", err)
+	}
+
 	savedRecord, err := c.Repo.Update(ctx, &ipRecord)
 	if err != nil {
 		slog.Error("error saving ip record to database", "ip", ip, "error", err, "alert_id", alerts.DatabaseWriteFailed.ID, "alert_name", alerts.DatabaseWriteFailed.Name)
@@ -192,7 +195,20 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ctx context.Context, ip string)
 	}
 
 	if c.metrics != nil {
-		c.metrics.AbuseIpDbDatabaseEntitiesCount.Inc()
+		if existingRecord == nil {
+			// Brand new record inserted
+			c.metrics.AbuseIpDbDatabaseEntitiesCount.Inc()
+			if status == "threat" {
+				c.metrics.AbuseIpDbDatabaseThreatsCount.Inc()
+			}
+		} else {
+			// Record updated. Adjust threat count if status transitioned.
+			if existingRecord.Status != "threat" && status == "threat" {
+				c.metrics.AbuseIpDbDatabaseThreatsCount.Inc()
+			} else if existingRecord.Status == "threat" && status != "threat" {
+				c.metrics.AbuseIpDbDatabaseThreatsCount.Dec()
+			}
+		}
 	}
 
 	return savedRecord, nil

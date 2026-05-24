@@ -292,3 +292,58 @@ func TestAbuseIPDBClient_CleanExpiredAndMetrics(t *testing.T) {
 		t.Error("expected 2.2.2.2 to remain in cache")
 	}
 }
+
+func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
+	db, dbPath := setupTestDB(t)
+	defer db.Close()
+	defer os.Remove(dbPath)
+
+	cfg := &config.Config{
+		LogLevel: "debug",
+		FailOpen: false,
+	}
+	cfg.AbuseIPDB.Enabled = true
+	cfg.AbuseIPDB.APIKey = "test-key"
+	cfg.AbuseIPDB.ConfidenceScoreThreshold = 90
+	cfg.AbuseIPDB.CacheMaxSize = 10
+	cfg.AbuseIPDB.ExpirationTime = 1 * time.Hour
+
+	repo := storage.NewIPRepository(db, cfg)
+	client := NewAbuseIPDBClient(cfg, repo)
+
+	m := metrics.GetMetrics()
+	client.SetMetrics(m)
+
+	// Transition 1: brand new threat
+	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 95}}`)
+	}))
+	defer server1.Close()
+	client.Client.AbuseIPDBRestUrl = server1.URL + "?ipAddress=%s"
+
+	_, err := client.CheckIP(context.Background(), "9.9.9.9")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Transition 2: update to safe
+	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 20}}`)
+	}))
+	defer server2.Close()
+	client.Client.AbuseIPDBRestUrl = server2.URL + "?ipAddress=%s"
+
+	client.IPCache.Remove("9.9.9.9")
+	// Make it look expired in DB
+	_, err = db.Exec(`UPDATE ip_records SET expires_at = ? WHERE ip = ?`, time.Now().Add(-1*time.Hour), "9.9.9.9")
+	if err != nil {
+		t.Fatalf("failed to expire record: %v", err)
+	}
+
+	_, err = client.CheckIP(context.Background(), "9.9.9.9")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

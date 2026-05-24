@@ -224,3 +224,34 @@ func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 	}{Enabled: true, APIKey: "test", ExpirationTime: 24 * time.Hour, ConfidenceScoreThreshold: 50}})
 	return err, repo, db
 }
+
+func TestIPRepositoryGetRecord(t *testing.T) {
+	_, repo, db := initialize(t)
+	defer removeDatabaseFile(t)
+	defer db.Close()
+
+	// Insert an expired record
+	expiredAt := time.Now().Add(-1 * time.Hour)
+	_, err := repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?)`, "10.0.0.1", "threat", 95, "test", time.Now(), expiredAt)
+	if err != nil {
+		t.Fatalf("failed to insert test record: %v", err)
+	}
+
+	// GetByIp should return sql.ErrNoRows because it is expired
+	_, err = repo.GetByIp(context.Background(), "10.0.0.1")
+	if err != sql.ErrNoRows {
+		t.Errorf("expected ErrNoRows, got: %v", err)
+	}
+
+	// GetRecord should return the record even though it is expired
+	record, err := repo.GetRecord(context.Background(), "10.0.0.1")
+	if err != nil {
+		t.Fatalf("expected no error from GetRecord, got: %v", err)
+	}
+	if record.IP != "10.0.0.1" {
+		t.Errorf("expected IP 10.0.0.1, got: %s", record.IP)
+	}
+	if record.Status != "threat" {
+		t.Errorf("expected status 'threat', got: %s", record.Status)
+	}
+}
