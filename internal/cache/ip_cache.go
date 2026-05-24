@@ -20,6 +20,7 @@ type IPCache struct {
 	lru         *list.List
 	maxSize     int
 	threatCount int
+	Now         func() time.Time
 }
 
 func NewIPCache(maxSize int) *IPCache {
@@ -28,6 +29,7 @@ func NewIPCache(maxSize int) *IPCache {
 		lru:         list.New(),
 		maxSize:     maxSize,
 		threatCount: 0,
+		Now:         time.Now,
 	}
 }
 
@@ -38,7 +40,7 @@ func (c *IPCache) Get(ip string) (model.IPRecord, bool) {
 	if entry, exists := c.cache[ip]; exists {
 		// Move to front (most recently used)
 		c.lru.MoveToFront(entry.element)
-		entry.timestamp = time.Now()
+		entry.timestamp = c.Now()
 		return entry.record, true
 	}
 	return model.IPRecord{}, false
@@ -57,7 +59,7 @@ func (c *IPCache) Set(ip string, record model.IPRecord) {
 		}
 		
 		entry.record = record
-		entry.timestamp = time.Now()
+		entry.timestamp = c.Now()
 		c.lru.MoveToFront(entry.element)
 		return
 	}
@@ -75,7 +77,7 @@ func (c *IPCache) Set(ip string, record model.IPRecord) {
 	c.cache[ip] = &CacheEntry{
 		record:    record,
 		element:   element,
-		timestamp: time.Now(),
+		timestamp: c.Now(),
 	}
 }
 

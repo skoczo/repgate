@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -25,8 +26,6 @@ func TestIPRepository(t *testing.T) {
 	if record.IP != "127.0.0.1" {
 		t.Errorf("IP record IP is not correct: %s", record.IP)
 	}
-
-	removeDatabaseFile(t)
 }
 
 // failed to save IP record
@@ -39,8 +38,6 @@ func TestIPRepositorySaveFailed(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
-
-	removeDatabaseFile(t)
 }
 
 func TestIPRepositoryDelete(t *testing.T) {
@@ -69,7 +66,6 @@ func TestIPRepositoryDelete(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
-	removeDatabaseFile(t)
 }
 
 func TestIPRepositoryDeleteExpired(t *testing.T) {
@@ -104,7 +100,6 @@ func TestIPRepositoryDeleteExpired(t *testing.T) {
 	if record != nil {
 		t.Errorf("expected record to be nil but got %v", record)
 	}
-	removeDatabaseFile(t)
 }
 
 func TestIPRepositoryFailToDelete(t *testing.T) {
@@ -115,7 +110,6 @@ func TestIPRepositoryFailToDelete(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
-	removeDatabaseFile(t)
 }
 
 func TestIPRepositoryDeleteExpiredWithNoRecords(t *testing.T) {
@@ -125,7 +119,6 @@ func TestIPRepositoryDeleteExpiredWithNoRecords(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to delete expired IP records: %v", err)
 	}
-	removeDatabaseFile(t)
 }
 
 func TestIPRepositoryDeleteExpiredFailed(t *testing.T) {
@@ -136,12 +129,10 @@ func TestIPRepositoryDeleteExpiredFailed(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
-	removeDatabaseFile(t)
 }
 
 func TestIPRepositoryCount(t *testing.T) {
 	_, repo, db := initialize(t)
-	defer removeDatabaseFile(t)
 	defer db.Close()
 
 	// Initial count should be 0
@@ -197,11 +188,12 @@ func TestIPRepositoryCountFailed(t *testing.T) {
 	if err == nil {
 		t.Error("expected error from Count() when database is closed, got nil")
 	}
-	removeDatabaseFile(t)
 }
 
 func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
-	db, err := OpenSQLiteDB("repgate.db")
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "repgate.db")
+	db, err := OpenSQLiteDB(dbPath)
 	if err != nil {
 		t.Errorf("failed to open database: %v", err)
 	}
@@ -227,7 +219,6 @@ func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 
 func TestIPRepositoryGetRecord(t *testing.T) {
 	_, repo, db := initialize(t)
-	defer removeDatabaseFile(t)
 	defer db.Close()
 
 	// Insert an expired record

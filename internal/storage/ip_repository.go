@@ -14,15 +14,16 @@ import (
 type IPRepository struct {
 	db             *sql.DB
 	expirationTime time.Duration
+	Now            func() time.Time
 }
 
 func NewIPRepository(db *sql.DB, cfg *config.Config) *IPRepository {
-	return &IPRepository{db: db, expirationTime: cfg.AbuseIPDB.ExpirationTime}
+	return &IPRepository{db: db, expirationTime: cfg.AbuseIPDB.ExpirationTime, Now: time.Now}
 }
 
 func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord, error) {
 	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ? and expires_at > ?`
-	row := r.db.QueryRowContext(ctx, query, ip, time.Now())
+	row := r.db.QueryRowContext(ctx, query, ip, r.Now())
 
 	var record model.IPRecord
 	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
@@ -61,7 +62,7 @@ func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) (*mod
 		checked_at=excluded.checked_at,
 		expires_at=excluded.expires_at
 	`
-	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, time.Now(), time.Now().Add(r.expirationTime))
+	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, r.Now(), r.Now().Add(r.expirationTime))
 	if err != nil {
 		return nil, fmt.Errorf("failed to save IP record: %w", err)
 	}
