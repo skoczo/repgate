@@ -4,15 +4,31 @@
     "dockerfile": "Dockerfile",
     "context": "."
   },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "vscode"
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.25.0"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "18"
+    }
+  },
+  "remoteUser": "vscode",
   "customizations": {
     "vscode": {
       "extensions": [
         "golang.Go",
         "ms-azuretools.vscode-docker",
         "github.vscode-github-actions",
-        "redhat.vscode-yaml"
+        "redhat.vscode-yaml",
+        "svelte.svelte-vscode"
       ]
     }
   },
-  "postCreateCommand": "go version"
+  "postCreateCommand": "go version",
+  "forwardPorts": [
+    8080
+  ]
 }

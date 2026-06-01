@@ -2,9 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/netip"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,7 +15,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/skoczo/repgate/internal/alerts"
 	"github.com/skoczo/repgate/internal/metrics"
+	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/threatcheck"
+	"github.com/skoczo/repgate/web"
 )
 
 // contract status codes for the API
@@ -23,10 +28,15 @@ const (
 )
 
 type Handler struct {
-	threatSources []threatcheck.ThreatSource
-	failOpen      bool
-	logSafeIPs    bool
-	metrics       *metrics.Metrics
+	threatSources  []threatcheck.ThreatSource
+	failOpen       bool
+	logSafeIPs     bool
+	metrics        *metrics.Metrics
+	startTime      time.Time
+	mu             sync.Mutex
+	lastCacheFetch time.Time
+	cachedL2Count  int
+	cachedL2Threat int
 }
 
 func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, logSafeIPs bool, timeout time.Duration) http.Handler {
@@ -35,6 +45,7 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, logSafeI
 		failOpen:      failOpen,
 		logSafeIPs:    logSafeIPs,
 		metrics:       metrics.GetMetrics(),
+		startTime:     time.Now(),
 	}
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
@@ -48,6 +59,31 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, logSafeI
 
 	r.Get("/check", h.checkHandler)
 	r.Handle("/metrics", promhttp.Handler())
+
+	r.Get("/api/v1/status", h.statusHandler)
+
+	distFS, err := fs.Sub(web.Assets, "dist")
+	if err != nil {
+		slog.Error("failed to get sub-filesystem for web assets", "error", err)
+	} else {
+		fileServer := http.FileServer(http.FS(distFS))
+		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			path := req.URL.Path
+			if path == "/" {
+				fileServer.ServeHTTP(w, req)
+				return
+			}
+			filePath := path[1:]
+			if _, err := distFS.Open(filePath); err != nil {
+				if strings.HasPrefix(path, "/api/") {
+					http.NotFound(w, req)
+					return
+				}
+				req.URL.Path = "/"
+			}
+			fileServer.ServeHTTP(w, req)
+		}))
+	}
 
 	return r
 }
@@ -150,4 +186,49 @@ func (h *Handler) sendResponse(w http.ResponseWriter, status int, data any) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Error("failed to encode response", "error", err)
 	}
+}
+
+func (h *Handler) statusHandler(w http.ResponseWriter, r *http.Request) {
+	uptimeDuration := time.Since(h.startTime).Round(time.Second)
+
+	var l1Entries, l1Capacity int
+	var l2Entries, l2Threats int
+
+	for _, source := range h.threatSources {
+		if client, ok := source.(*threatcheck.AbuseIPDBThreatSource); ok {
+			l1Entries = client.IPCache.NumOfEntries()
+			l1Capacity = client.IPCache.Size()
+
+			h.mu.Lock()
+			if time.Since(h.lastCacheFetch) > 15*time.Second {
+				if count, err := client.Repo.Count(r.Context()); err == nil {
+					h.cachedL2Count = count
+				} else {
+					slog.Error("failed to get L2 database count for GUI status", "error", err)
+				}
+
+				if threats, err := client.Repo.ThreatCount(r.Context()); err == nil {
+					h.cachedL2Threat = threats
+				} else {
+					slog.Error("failed to get L2 database threat count for GUI status", "error", err)
+				}
+				h.lastCacheFetch = time.Now()
+			}
+			l2Entries = h.cachedL2Count
+			l2Threats = h.cachedL2Threat
+			h.mu.Unlock()
+			break
+		}
+	}
+
+	status := model.SystemStatus{
+		Uptime:          uptimeDuration.String(),
+		FailOpen:        h.failOpen,
+		L1CacheEntries:  l1Entries,
+		L1CacheCapacity: l1Capacity,
+		L2CacheEntries:  l2Entries,
+		L2ThreatEntries: l2Threats,
+	}
+
+	h.sendResponse(w, StatusOK, status)
 }
