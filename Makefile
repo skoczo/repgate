@@ -1,12 +1,19 @@
 APP := repgate
 IMAGE := repgate:dev
 
-.PHONY: tidy build run test bench bench-report coverage docker-build docker-run clean
+.PHONY: tidy build run test bench bench-report coverage docker-build docker-run clean frontend
 
 tidy:
 	go mod tidy
 
+frontend:
+	cd web && npm install && npm run build
+
 build:
+	@if [ ! -d "web/dist" ]; then \
+		echo "web/dist not found. Building frontend..."; \
+		$(MAKE) frontend; \
+	fi
 	mkdir -p bin
 	go build -o bin/$(APP) ./cmd/repgate
 
