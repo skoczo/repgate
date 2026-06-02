@@ -23,3 +23,20 @@ AbuseIPDB:
     max_retries: 3
     cool_down_period: 30s
     open_on_error: true
+
+active_defence:
+  enabled: true
+  expiration_time: "permanent"
+  honeytoken_paths:
+    - '\.env'
+    - '\.git/'
+    - '\.vscode/'
+    - 'sftp-config\.json'
+    - '\.aws/credentials'
+    - '(credentials|firebase|service-account|client_secret|gcp-credentials|secrets|keyfile|sa-key|application_default_credentials|service-account-key|sa-private-key|gcp-service-account)\.json$'
+    - 'secrets\.yml$'
+    - 'wp-login\.php'
+    - 'xmlrpc\.php'
+    - '(txets|chosen|bless|blurbs|akcc|abcd|shelp|cord|dex|bolt|cjfuns|zwso|ioxi-o|insc|classwithtostring|goods|lufix|style)\.php'
+    - 'phpinfo'
+    - 'laravel\.log$'

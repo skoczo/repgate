@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/alerts"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
@@ -29,6 +31,7 @@ const (
 
 type Handler struct {
 	threatSources  []threatcheck.ThreatSource
+	adService      *activedefence.Service
 	failOpen       bool
 	logSafeIPs     bool
 	metrics        *metrics.Metrics
@@ -39,9 +42,10 @@ type Handler struct {
 	cachedL2Threat int
 }
 
-func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, logSafeIPs bool, timeout time.Duration) http.Handler {
+func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, timeout time.Duration) http.Handler {
 	h := &Handler{
 		threatSources: threatSources,
+		adService:     adService,
 		failOpen:      failOpen,
 		logSafeIPs:    logSafeIPs,
 		metrics:       metrics.GetMetrics(),
@@ -61,6 +65,7 @@ func NewRouter(threatSources []threatcheck.ThreatSource, failOpen bool, logSafeI
 	r.Handle("/metrics", promhttp.Handler())
 
 	r.Get("/api/v1/status", h.statusHandler)
+	r.HandleFunc("/report-threat", h.reportThreatHandler)
 
 	distFS, err := fs.Sub(web.Assets, "dist")
 	if err != nil {
@@ -127,6 +132,23 @@ func (h *Handler) checkHandler(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("X-Client-IP header is not a valid IP address", "ip", ip, "alert_id", alerts.ClientIPHeaderInvalid.ID, "alert_name", alerts.ClientIPHeaderInvalid.Name)
 		h.sendResponse(w, StatusForbidden, "X-Client-IP header is not a valid IP address")
 		return
+	}
+
+	// check if the requested path is a honeytoken (if active defence is enabled)
+	if h.adService != nil {
+		targetPath := r.Header.Get("X-Original-URI")
+		if targetPath == "" {
+			targetPath = r.URL.Path
+		}
+		if h.adService.IsHoneytoken(targetPath) {
+			if err := h.adService.ReportThreat(r.Context(), ip, targetPath); err != nil {
+				slog.Error("failed to report honeytoken threat", "ip", ip, "path", targetPath, "error", err)
+			}
+			slog.Warn("Threat IP detected via honeytoken path", "ip", ip, "target_host", targetHost, "target_path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
+			h.metrics.ThreatCount.WithLabelValues(targetHost).Inc()
+			h.sendResponse(w, StatusForbidden, "IP is a threat")
+			return
+		}
 	}
 
 	for _, source := range h.threatSources {
@@ -231,4 +253,38 @@ func (h *Handler) statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.sendResponse(w, StatusOK, status)
+}
+
+func (h *Handler) reportThreatHandler(w http.ResponseWriter, r *http.Request) {
+	if h.adService == nil {
+		h.sendResponse(w, http.StatusNotFound, map[string]string{"error": "Active defence is disabled"})
+		return
+	}
+
+	ip := r.Header.Get("X-Client-IP")
+	if ip == "" {
+		// Fallback to RemoteAddr (excluding port)
+		var err error
+		if ip, _, err = net.SplitHostPort(r.RemoteAddr); err != nil {
+			ip = r.RemoteAddr
+		}
+	}
+
+	if _, err := netip.ParseAddr(ip); err != nil {
+		h.sendResponse(w, http.StatusBadRequest, map[string]string{"error": "Invalid client IP address"})
+		return
+	}
+
+	targetPath := r.Header.Get("X-Original-URI")
+	if targetPath == "" {
+		targetPath = r.URL.Path
+	}
+
+	if err := h.adService.ReportThreat(r.Context(), ip, targetPath); err != nil {
+		slog.Error("failed to report threat", "ip", ip, "error", err)
+		h.sendResponse(w, http.StatusInternalServerError, map[string]string{"error": "Failed to report threat"})
+		return
+	}
+
+	h.sendResponse(w, http.StatusOK, map[string]string{"status": "success", "message": "IP reported as threat"})
 }

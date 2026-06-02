@@ -62,12 +62,21 @@ func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) (*mod
 		checked_at=excluded.checked_at,
 		expires_at=excluded.expires_at
 	`
-	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, r.Now(), r.Now().Add(r.expirationTime))
+	checkedAt := record.CheckedAt
+	if checkedAt.IsZero() {
+		checkedAt = r.Now()
+	}
+	expiresAt := record.ExpiresAt
+	if expiresAt.IsZero() {
+		expiresAt = r.Now().Add(r.expirationTime)
+	}
+
+	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, checkedAt, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save IP record: %w", err)
 	}
 
-	dbRecord, err := r.GetByIp(ctx, record.IP)
+	dbRecord, err := r.GetRecord(ctx, record.IP)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get IP record after saving: %w", err)
 	}

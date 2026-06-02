@@ -29,6 +29,11 @@ type Config struct {
 			OpenOnError    bool          `yaml:"open_on_error"`
 		} `yaml:"circuit_breaker"`
 	} `yaml:"AbuseIPDB"`
+	ActiveDefence struct {
+		Enabled         bool     `yaml:"enabled"`
+		ExpirationTime  string   `yaml:"expiration_time"`
+		HoneytokenPaths []string `yaml:"honeytoken_paths"`
+	} `yaml:"active_defence"`
 }
 
 func LoadConfig(path string) (*Config, error) {

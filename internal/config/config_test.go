@@ -31,6 +31,12 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.AbuseIPDB.CacheMaxSize != 1000 {
 		t.Errorf("abuse ip db cache max size is not 1000 but %d", cfg.AbuseIPDB.CacheMaxSize)
 	}
+	if cfg.ActiveDefence.Enabled != true {
+		t.Errorf("active defence is not enabled but %t", cfg.ActiveDefence.Enabled)
+	}
+	if cfg.ActiveDefence.ExpirationTime != "permanent" {
+		t.Errorf("active defence expiration time is not permanent but %s", cfg.ActiveDefence.ExpirationTime)
+	}
 }
 
 func TestLoadConfigInvalidFile(t *testing.T) {

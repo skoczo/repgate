@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/api"
 	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/metrics"
@@ -62,11 +63,28 @@ func main() {
 
 	slog.Info("Configuration loaded successfully", "AbuseIPDBEnabled", cfg.AbuseIPDB.Enabled)
 
+	var adService *activedefence.Service
+	if cfg.ActiveDefence.Enabled {
+		var caches []activedefence.Cache
+		for _, source := range threatSources {
+			if client, ok := source.(*threatcheck.AbuseIPDBThreatSource); ok {
+				caches = append(caches, client.IPCache)
+			}
+		}
+		var err error
+		adService, err = activedefence.NewService(repo, caches, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
+		if err != nil {
+			slog.Error("Failed to initialize active defence service", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("Active defence service initialized", "honeytoken_paths_count", len(cfg.ActiveDefence.HoneytokenPaths))
+	}
+
 	slog.Info("Starting IP Auth Server")
 
 	server := &http.Server{
 		Addr:              cfg.Server.Port,
-		Handler:           api.NewRouter(threatSources, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout),
+		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
