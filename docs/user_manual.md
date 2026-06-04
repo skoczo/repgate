@@ -270,6 +270,41 @@ http {
 
 ---
 
+## 🤖 Handling `/robots.txt` and `/robot.txt` (Blocking Crawlers/Scanners)
+
+If you want to prevent web crawlers, indexers, and scrapers (such as Googlebot, Bingbot, or GPTBot) from scanning your website, returning `404 Not Found` or `403 Forbidden` responses is **ineffective**. Compliant web crawlers interpret a missing or blocked `robots.txt` file as "no restrictions" and will continue scanning your entire site.
+
+To explicitly tell compliant crawlers not to index or scan your application, you must serve a `200 OK` response containing the following directive:
+
+```text
+User-agent: *
+Disallow: /
+```
+
+### Nginx Configuration
+
+You can easily handle this directly at the Nginx edge level, bypassing both the Repgate check (`auth_request`) and your backend service entirely for these endpoints.
+
+Add these `location` blocks inside your Nginx `server` configuration block(s):
+
+```nginx
+# Handle official robots.txt request
+location = /robots.txt {
+    auth_request off;  # Disable Repgate check for this request
+    add_header Content-Type text/plain;
+    return 200 "User-agent: *\nDisallow: /\n";
+}
+
+# Handle common singular typo /robot.txt request
+location = /robot.txt {
+    auth_request off;  # Disable Repgate check for this request
+    add_header Content-Type text/plain;
+    return 200 "User-agent: *\nDisallow: /\n";
+}
+```
+
+---
+
 ## 🔍 Step 3: Verification & Log Inspection
 
 Once Nginx and Repgate are restarted, incoming requests will begin appearing in the Repgate live feed.

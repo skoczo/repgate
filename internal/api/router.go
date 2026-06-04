@@ -65,7 +65,7 @@ func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefenc
 		subscribers:   make(map[chan model.Event]struct{}),
 		retentionDays: retentionDays,
 	}
-	
+
 	go h.startEventProcessor()
 
 	r := chi.NewRouter()
