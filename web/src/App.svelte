@@ -175,7 +175,7 @@
   <!-- Header Section -->
   <header class="header">
     <div class="brand">
-      <div class="logo-shield">🛡️</div>
+      <img src="/logo.png" alt="Repgate Logo" class="logo-image" />
       <div>
         <h1>REPGATE</h1>
         <p class="subtitle">IP Reputation & Threat Filter Gateway</p>
@@ -442,8 +442,9 @@
     gap: 1rem;
   }
 
-  .logo-shield {
-    font-size: 2.5rem;
+  .logo-image {
+    height: 80px;
+    width: auto;
     filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.4));
   }
 
