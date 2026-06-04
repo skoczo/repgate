@@ -29,7 +29,7 @@ func setupTestDB(t *testing.T) (*sql.DB, string) {
 		t.Fatalf("failed to open db: %v", err)
 	}
 
-	err = storage.RunMigrations(db, "../../db/migrations/001_init.sql")
+	err = storage.RunMigrations(db, "../../db/migrations")
 	if err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}

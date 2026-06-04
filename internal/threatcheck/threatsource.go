@@ -18,4 +18,5 @@ type ThreatSource interface {
 type ThreatCheckResult struct {
 	IP       string
 	IsThreat bool
+	Source   string
 }

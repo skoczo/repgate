@@ -3,15 +3,18 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
+	"github.com/skoczo/repgate/internal/storage"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
@@ -101,7 +104,7 @@ func TestHandler_checkHanlder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(tt.threatSources, nil, tt.failOpen, false, 5*time.Second)
+			router := NewRouter(tt.threatSources, nil, tt.failOpen, false, 5*time.Second, nil, 7)
 
 			req := httptest.NewRequest("GET", "/check", nil)
 			if tt.name == "invalid X-Client-IP" {
@@ -153,7 +156,7 @@ func TestHandler_honeytokenDetection(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, false, 5*time.Second)
+	router := NewRouter(nil, adService, false, false, 5*time.Second, nil, 7)
 
 	// Call check with a honeytoken path
 	req := httptest.NewRequest("GET", "/check", nil)
@@ -186,7 +189,7 @@ func TestHandler_reportThreatHandler(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, false, 5*time.Second)
+	router := NewRouter(nil, adService, false, false, 5*time.Second, nil, 7)
 
 	req := httptest.NewRequest("POST", "/report-threat", nil)
 	req.Header.Set("X-Client-IP", "5.6.7.8")
@@ -206,5 +209,82 @@ func TestHandler_reportThreatHandler(t *testing.T) {
 	}
 	if rec.Status != "threat" {
 		t.Errorf("expected status 'threat', got %s", rec.Status)
+	}
+}
+
+func TestHandler_eventsAndStreaming(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "repgate.db")
+	dbConn, err := storage.OpenSQLiteDB(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	defer dbConn.Close()
+
+	if err := storage.RunMigrations(dbConn, "../../db/migrations"); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	eventRepo := storage.NewEventRepository(dbConn)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, eventRepo, 7)
+
+	// Trigger a check request that logs an event
+	req := httptest.NewRequest("GET", "/check", nil)
+	req.Header.Set("X-Client-IP", "9.9.9.9")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	// Wait a brief moment for the async event processor to save the event to the DB
+	time.Sleep(100 * time.Millisecond)
+
+	// Query events history
+	reqHist := httptest.NewRequest("GET", "/api/v1/events?limit=10", nil)
+	rrHist := httptest.NewRecorder()
+	router.ServeHTTP(rrHist, reqHist)
+
+	if rrHist.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrHist.Code)
+	}
+
+	var events []model.Event
+	if err := json.Unmarshal(rrHist.Body.Bytes(), &events); err != nil {
+		t.Fatalf("failed to unmarshal events: %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	if events[0].IP != "9.9.9.9" {
+		t.Errorf("expected event IP to be 9.9.9.9, got %s", events[0].IP)
+	}
+	if events[0].Action != "allow" {
+		t.Errorf("expected event action to be allow, got %s", events[0].Action)
+	}
+}
+
+func TestHandler_eventsDisabled(t *testing.T) {
+	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 0)
+
+	// Fetching events should return StatusForbidden
+	reqHist := httptest.NewRequest("GET", "/api/v1/events", nil)
+	rrHist := httptest.NewRecorder()
+	router.ServeHTTP(rrHist, reqHist)
+
+	if rrHist.Code != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, rrHist.Code)
+	}
+
+	// Fetching logs stream should return StatusForbidden
+	reqStream := httptest.NewRequest("GET", "/api/v1/stream/logs", nil)
+	rrStream := httptest.NewRecorder()
+	router.ServeHTTP(rrStream, reqStream)
+
+	if rrStream.Code != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, rrStream.Code)
 	}
 }

@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	LogLevel   string `yaml:"log_level"`
-	FailOpen   bool   `yaml:"fail_open"`
-	LogSafeIPs bool   `yaml:"log_safe_ips"`
-	Server     struct {
+	LogLevel                string `yaml:"log_level"`
+	FailOpen                bool   `yaml:"fail_open"`
+	LogSafeIPs              bool   `yaml:"log_safe_ips"`
+	LiveStreamRetentionDays int    `yaml:"live_stream_retention_days"`
+	Server                  struct {
 		Port              string        `yaml:"port"`
 		ReadTimeout       time.Duration `yaml:"read_timeout"`
 		WriteTimeout      time.Duration `yaml:"write_timeout"`
@@ -43,6 +44,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	var cfg Config
+	cfg.LiveStreamRetentionDays = 0 // disabled by default
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}

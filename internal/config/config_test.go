@@ -16,6 +16,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.FailOpen != true {
 		t.Errorf("fail open is not true but %t", cfg.FailOpen)
 	}
+	if cfg.LiveStreamRetentionDays != 7 {
+		t.Errorf("live stream retention days is not 7 but %d", cfg.LiveStreamRetentionDays)
+	}
 	if cfg.AbuseIPDB.Enabled != true {
 		t.Errorf("abuse ip db is not enabled but %t", cfg.AbuseIPDB.Enabled)
 	}

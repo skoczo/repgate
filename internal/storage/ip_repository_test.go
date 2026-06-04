@@ -199,7 +199,7 @@ func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 	}
 
 	// run migrations
-	if err := RunMigrations(db, "../../db/migrations/001_init.sql"); err != nil {
+	if err := RunMigrations(db, "../../db/migrations"); err != nil {
 		t.Errorf("failed to run migrations: %v", err)
 	}
 	repo := NewIPRepository(db, &config.Config{AbuseIPDB: struct {

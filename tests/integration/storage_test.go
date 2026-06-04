@@ -27,8 +27,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 	db, err := storage.OpenSQLiteDB(dbPath)
 	require.NoError(t, err, "Should open SQLite DB")
 
-	// Adjust the path to the migration file based on the test execution location
-	err = storage.RunMigrations(db, "../../db/migrations/001_init.sql")
+	// Adjust the path to the migration directory based on the test execution location
+	err = storage.RunMigrations(db, "../../db/migrations")
 	require.NoError(t, err, "Should run migrations successfully")
 
 	return db

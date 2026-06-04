@@ -3,6 +3,9 @@ log_level: info
 # log also safe ips
 log_safe_ips: false
 
+# live stream retention in days
+live_stream_retention_days: 7
+
 # if fail_open is true, the server will allow traffic even if the threat source is not available
 # if fail_open is false, the server will block traffic if the threat source is not available
 fail_open: true

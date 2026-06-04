@@ -94,7 +94,7 @@ func (c *AbuseIPDBThreatSource) CheckIP(ctx context.Context, ip string) (ThreatC
 		if cached_result.ExpiresAt.Before(time.Now()) {
 			cleanExpiredIP(ctx, c, ip)
 		} else {
-			return c.createResult(cached_result.IP, cached_result.Score), nil
+			return c.createResult(cached_result.IP, cached_result.Score, cached_result.Source), nil
 		}
 	}
 
@@ -107,14 +107,14 @@ func (c *AbuseIPDBThreatSource) CheckIP(ctx context.Context, ip string) (ThreatC
 	if result != nil {
 		slog.Debug("ip found in database", "ip", ip, "status", result.Status, "score", result.Score)
 		c.IPCache.Set(ip, *result)
-		return c.createResult(result.IP, result.Score), nil
+		return c.createResult(result.IP, result.Score, result.Source), nil
 	}
 
 	// if not in cache, check abuseipdb and update cache and database
 	if !c.allowRequest() {
 		slog.Warn("circuit breaker open, skipping abuseipdb request", "ip", ip, "alert_id", alerts.CircuitBreakerTripped.ID, "alert_name", alerts.CircuitBreakerTripped.Name)
 		if c.Config.AbuseIPDB.CircuitBreaker.OpenOnError {
-			return c.createResult(ip, 0), nil // Fail open, return safe
+			return c.createResult(ip, 0, ""), nil // Fail open, return safe
 		}
 		return ThreatCheckResult{}, errors.New("circuit breaker open")
 	}
@@ -124,7 +124,7 @@ func (c *AbuseIPDBThreatSource) CheckIP(ctx context.Context, ip string) (ThreatC
 	if err != nil {
 		c.recordFailure()
 		if c.Config.AbuseIPDB.CircuitBreaker.OpenOnError {
-			return c.createResult(ip, 0), nil // Fail open, return safe
+			return c.createResult(ip, 0, ""), nil // Fail open, return safe
 		}
 		return ThreatCheckResult{}, err
 	}
@@ -132,7 +132,7 @@ func (c *AbuseIPDBThreatSource) CheckIP(ctx context.Context, ip string) (ThreatC
 
 	c.IPCache.Set(ip, *ip_record)
 
-	return c.createResult(ip_record.IP, ip_record.Score), nil
+	return c.createResult(ip_record.IP, ip_record.Score, ip_record.Source), nil
 }
 
 func cleanExpiredIP(ctx context.Context, c *AbuseIPDBThreatSource, ip string) {
@@ -214,10 +214,11 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ctx context.Context, ip string)
 	return savedRecord, nil
 }
 
-func (c *AbuseIPDBThreatSource) createResult(ip string, score int) ThreatCheckResult {
+func (c *AbuseIPDBThreatSource) createResult(ip string, score int, source string) ThreatCheckResult {
 	return ThreatCheckResult{
 		IP:       ip,
 		IsThreat: c.isThread(score),
+		Source:   source,
 	}
 }
 

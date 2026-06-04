@@ -44,6 +44,7 @@ func main() {
 
 	// build threat sources based on config
 	repo := storage.NewIPRepository(db, cfg)
+	eventRepo := storage.NewEventRepository(db)
 	threatSources := buildThreadSources(cfg, repo)
 
 	if count, err := repo.Count(context.Background()); err == nil {
@@ -58,8 +59,18 @@ func main() {
 		slog.Error("Failed to get initial database threat count", "error", err)
 	}
 
-	// start background worker to periodically clean expired records from db and caches
-	go startCleanupWorker(repo, threatSources)
+	// Perform initial cleanup of expired events at startup if retention is enabled (> 0)
+	if cfg.LiveStreamRetentionDays > 0 {
+		cutoff := time.Now().AddDate(0, 0, -cfg.LiveStreamRetentionDays)
+		if affected, err := eventRepo.DeleteOlderThan(context.Background(), cutoff); err != nil {
+			slog.Error("Failed to delete expired events at startup", "error", err)
+		} else if affected > 0 {
+			slog.Info("Cleaned up expired live stream events at startup", "count", affected, "cutoff", cutoff)
+		}
+	}
+
+	// start background worker to periodically clean expired records from db, events, and caches
+	go startCleanupWorker(repo, eventRepo, cfg.LiveStreamRetentionDays, threatSources)
 
 	slog.Info("Configuration loaded successfully", "AbuseIPDBEnabled", cfg.AbuseIPDB.Enabled)
 
@@ -84,7 +95,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Server.Port,
-		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout),
+		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout, eventRepo, cfg.LiveStreamRetentionDays),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
@@ -120,7 +131,7 @@ func buildThreadSources(cfg *config.Config, repo *storage.IPRepository) []threat
 	return sources
 }
 
-func startCleanupWorker(repo *storage.IPRepository, sources []threatcheck.ThreatSource) {
+func startCleanupWorker(repo *storage.IPRepository, eventRepo *storage.EventRepository, retentionDays int, sources []threatcheck.ThreatSource) {
 	ticker := time.NewTicker(60 * time.Minute)
 	defer ticker.Stop()
 
@@ -140,6 +151,14 @@ func startCleanupWorker(repo *storage.IPRepository, sources []threatcheck.Threat
 
 		for _, source := range sources {
 			source.CleanExpired(now)
+		}
+
+		// Clean up expired events
+		cutoff := now.AddDate(0, 0, -retentionDays)
+		if affected, err := eventRepo.DeleteOlderThan(context.Background(), cutoff); err != nil {
+			slog.Error("Failed to delete expired events", "error", err)
+		} else if affected > 0 {
+			slog.Info("Cleaned up expired live stream events", "count", affected, "cutoff", cutoff)
 		}
 	}
 }
@@ -171,7 +190,7 @@ func createDBAndRunDBMigrations() *sql.DB {
 		os.Exit(1)
 	}
 
-	if err := storage.RunMigrations(db, "db/migrations/001_init.sql"); err != nil {
+	if err := storage.RunMigrations(db, "db/migrations"); err != nil {
 		slog.Error("Failed to run migrations", "error", err)
 		os.Exit(1)
 	}
