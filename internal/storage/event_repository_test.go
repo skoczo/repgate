@@ -54,7 +54,7 @@ func TestEventRepository(t *testing.T) {
 		t.Fatalf("failed to insert event 2: %v", err)
 	}
 
-	events, err := repo.GetEvents(ctx, 0, 10)
+	events, err := repo.GetEvents(ctx, 0, 10, "")
 	if err != nil {
 		t.Fatalf("failed to get events: %v", err)
 	}
@@ -71,8 +71,31 @@ func TestEventRepository(t *testing.T) {
 		t.Errorf("expected second event to be 1.1.1.1, got %s", events[1].IP)
 	}
 
+	// Test filtering by action
+	blockedEvents, err := repo.GetEvents(ctx, 0, 10, "block")
+	if err != nil {
+		t.Fatalf("failed to get blocked events: %v", err)
+	}
+	if len(blockedEvents) != 1 {
+		t.Fatalf("expected 1 blocked event, got %d", len(blockedEvents))
+	}
+	if blockedEvents[0].IP != "1.1.1.1" {
+		t.Errorf("expected blocked event to be 1.1.1.1, got %s", blockedEvents[0].IP)
+	}
+
+	allowedEvents, err := repo.GetEvents(ctx, 0, 10, "allow")
+	if err != nil {
+		t.Fatalf("failed to get allowed events: %v", err)
+	}
+	if len(allowedEvents) != 1 {
+		t.Fatalf("expected 1 allowed event, got %d", len(allowedEvents))
+	}
+	if allowedEvents[0].IP != "2.2.2.2" {
+		t.Errorf("expected allowed event to be 2.2.2.2, got %s", allowedEvents[0].IP)
+	}
+
 	// Test pagination (beforeID)
-	paginatedEvents, err := repo.GetEvents(ctx, e2.ID, 10)
+	paginatedEvents, err := repo.GetEvents(ctx, e2.ID, 10, "")
 	if err != nil {
 		t.Fatalf("failed to get paginated events: %v", err)
 	}
@@ -93,7 +116,7 @@ func TestEventRepository(t *testing.T) {
 		t.Errorf("expected 1 deleted event, got %d", deleted)
 	}
 
-	eventsAfterDelete, err := repo.GetEvents(ctx, 0, 10)
+	eventsAfterDelete, err := repo.GetEvents(ctx, 0, 10, "")
 	if err != nil {
 		t.Fatalf("failed to get events: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/skoczo/repgate/internal/model"
@@ -33,27 +34,35 @@ func (r *EventRepository) Insert(ctx context.Context, e *model.Event) error {
 	return nil
 }
 
-func (r *EventRepository) GetEvents(ctx context.Context, beforeID int64, limit int) ([]model.Event, error) {
+func (r *EventRepository) GetEvents(ctx context.Context, beforeID int64, limit int, action string) ([]model.Event, error) {
 	var rows *sql.Rows
 	var err error
+
+	query := `
+	SELECT id, ip, target_host, target_path, action, source, timestamp
+	FROM events
+	`
+	var conditions []string
+	var args []interface{}
+
 	if beforeID > 0 {
-		query := `
-		SELECT id, ip, target_host, target_path, action, source, timestamp
-		FROM events
-		WHERE id < ?
-		ORDER BY id DESC
-		LIMIT ?
-		`
-		rows, err = r.db.QueryContext(ctx, query, beforeID, limit)
-	} else {
-		query := `
-		SELECT id, ip, target_host, target_path, action, source, timestamp
-		FROM events
-		ORDER BY id DESC
-		LIMIT ?
-		`
-		rows, err = r.db.QueryContext(ctx, query, limit)
+		conditions = append(conditions, "id < ?")
+		args = append(args, beforeID)
 	}
+
+	if action != "" {
+		conditions = append(conditions, "action = ?")
+		args = append(args, action)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query += " ORDER BY id DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err = r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query events: %w", err)
 	}

@@ -59,9 +59,20 @@
     }
   }
 
+  function setFilter(filter: string) {
+    if (eventFilter === filter) return;
+    eventFilter = filter;
+    events = [];
+    hasMoreEvents = true;
+    oldestEventId = null;
+    loadingInitial = true;
+    fetchInitialEvents();
+  }
+
   async function fetchInitialEvents() {
     try {
-      const res = await fetch('/api/v1/events?limit=50');
+      const filterParam = eventFilter !== 'all' ? `&action=${eventFilter}` : '';
+      const res = await fetch(`/api/v1/events?limit=50${filterParam}`);
       if (!res.ok) {
         throw new Error(`HTTP error! Status: ${res.status}`);
       }
@@ -72,6 +83,8 @@
       }
       if (data.length > 0) {
         oldestEventId = data[data.length - 1].id;
+      } else {
+        oldestEventId = null;
       }
     } catch (e: any) {
       console.error('Failed to load initial events', e);
@@ -86,7 +99,8 @@
     }
     loadingMore = true;
     try {
-      const res = await fetch(`/api/v1/events?before_id=${oldestEventId}&limit=50`);
+      const filterParam = eventFilter !== 'all' ? `&action=${eventFilter}` : '';
+      const res = await fetch(`/api/v1/events?before_id=${oldestEventId}&limit=50${filterParam}`);
       if (!res.ok) {
         throw new Error(`HTTP error! Status: ${res.status}`);
       }
@@ -313,7 +327,7 @@
               type="button"
               class="btn-filter" 
               class:active={eventFilter === 'all'} 
-              onclick={() => eventFilter = 'all'}
+              onclick={() => setFilter('all')}
               disabled={status?.live_stream_disabled}
             >
               All
@@ -322,7 +336,7 @@
               type="button"
               class="btn-filter filter-allow" 
               class:active={eventFilter === 'allow'} 
-              onclick={() => eventFilter = 'allow'}
+              onclick={() => setFilter('allow')}
               disabled={status?.live_stream_disabled}
             >
               Allowed
@@ -331,7 +345,7 @@
               type="button"
               class="btn-filter filter-block" 
               class:active={eventFilter === 'block'} 
-              onclick={() => eventFilter = 'block'}
+              onclick={() => setFilter('block')}
               disabled={status?.live_stream_disabled}
             >
               Blocked

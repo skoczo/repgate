@@ -288,3 +288,105 @@ func TestHandler_eventsDisabled(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusForbidden, rrStream.Code)
 	}
 }
+
+func TestHandler_eventsFiltering(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "repgate.db")
+	dbConn, err := storage.OpenSQLiteDB(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	defer dbConn.Close()
+
+	if err := storage.RunMigrations(dbConn, "../../db/migrations"); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	eventRepo := storage.NewEventRepository(dbConn)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, eventRepo, 7)
+
+	// Insert test events
+	err = eventRepo.Insert(context.Background(), &model.Event{
+		IP:         "1.1.1.1",
+		TargetHost: "example.com",
+		TargetPath: "/home",
+		Action:     "allow",
+		Source:     "System",
+		Timestamp:  time.Now().Add(-1 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("failed to insert allow event: %v", err)
+	}
+
+	err = eventRepo.Insert(context.Background(), &model.Event{
+		IP:         "2.2.2.2",
+		TargetHost: "example.com",
+		TargetPath: "/admin",
+		Action:     "block",
+		Source:     "AbuseIPDB",
+		Timestamp:  time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("failed to insert block event: %v", err)
+	}
+
+	// 1. Query only blocked events
+	reqBlock := httptest.NewRequest("GET", "/api/v1/events?limit=10&action=block", nil)
+	rrBlock := httptest.NewRecorder()
+	router.ServeHTTP(rrBlock, reqBlock)
+
+	if rrBlock.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrBlock.Code)
+	}
+
+	var blockedEvents []model.Event
+	if err := json.Unmarshal(rrBlock.Body.Bytes(), &blockedEvents); err != nil {
+		t.Fatalf("failed to unmarshal blocked events: %v", err)
+	}
+
+	if len(blockedEvents) != 1 {
+		t.Fatalf("expected 1 blocked event, got %d", len(blockedEvents))
+	}
+	if blockedEvents[0].IP != "2.2.2.2" {
+		t.Errorf("expected IP to be 2.2.2.2, got %s", blockedEvents[0].IP)
+	}
+
+	// 2. Query only allowed events
+	reqAllow := httptest.NewRequest("GET", "/api/v1/events?limit=10&action=allow", nil)
+	rrAllow := httptest.NewRecorder()
+	router.ServeHTTP(rrAllow, reqAllow)
+
+	if rrAllow.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrAllow.Code)
+	}
+
+	var allowedEvents []model.Event
+	if err := json.Unmarshal(rrAllow.Body.Bytes(), &allowedEvents); err != nil {
+		t.Fatalf("failed to unmarshal allowed events: %v", err)
+	}
+
+	if len(allowedEvents) != 1 {
+		t.Fatalf("expected 1 allowed event, got %d", len(allowedEvents))
+	}
+	if allowedEvents[0].IP != "1.1.1.1" {
+		t.Errorf("expected IP to be 1.1.1.1, got %s", allowedEvents[0].IP)
+	}
+
+	// 3. Query all events (invalid action query should default to all)
+	reqAll := httptest.NewRequest("GET", "/api/v1/events?limit=10&action=invalid", nil)
+	rrAll := httptest.NewRecorder()
+	router.ServeHTTP(rrAll, reqAll)
+
+	if rrAll.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rrAll.Code)
+	}
+
+	var allEvents []model.Event
+	if err := json.Unmarshal(rrAll.Body.Bytes(), &allEvents); err != nil {
+		t.Fatalf("failed to unmarshal all events: %v", err)
+	}
+
+	if len(allEvents) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(allEvents))
+	}
+}

@@ -319,6 +319,10 @@ func (h *Handler) eventsHandler(w http.ResponseWriter, r *http.Request) {
 
 	limitStr := r.URL.Query().Get("limit")
 	beforeIDStr := r.URL.Query().Get("before_id")
+	action := r.URL.Query().Get("action")
+	if action != "allow" && action != "block" {
+		action = ""
+	}
 
 	limit := 50
 	if limitStr != "" {
@@ -342,7 +346,7 @@ func (h *Handler) eventsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, err := h.eventRepo.GetEvents(r.Context(), beforeID, limit)
+	events, err := h.eventRepo.GetEvents(r.Context(), beforeID, limit, action)
 	if err != nil {
 		slog.Error("failed to fetch events from repository", "error", err)
 		h.sendResponse(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch events"})
