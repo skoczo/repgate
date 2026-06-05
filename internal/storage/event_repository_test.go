@@ -127,3 +127,32 @@ func TestEventRepository(t *testing.T) {
 		t.Errorf("expected remaining event to be 2.2.2.2, got %s", eventsAfterDelete[0].IP)
 	}
 }
+
+func TestEventRepositoryErrors(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "repgate.db")
+	db, err := OpenSQLiteDB(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	repo := NewEventRepository(db)
+	ctx := context.Background()
+
+	db.Close()
+
+	e := &model.Event{
+		IP: "1.1.1.1", Action: "block", Source: "System", Timestamp: time.Now(),
+	}
+
+	if err := repo.Insert(ctx, e); err == nil {
+		t.Error("expected error from Insert on closed db, got nil")
+	}
+
+	if _, err := repo.GetEvents(ctx, 0, 10, ""); err == nil {
+		t.Error("expected error from GetEvents on closed db, got nil")
+	}
+
+	if _, err := repo.DeleteOlderThan(ctx, time.Now()); err == nil {
+		t.Error("expected error from DeleteOlderThan on closed db, got nil")
+	}
+}

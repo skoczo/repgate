@@ -240,3 +240,23 @@ func TestIPRepositoryGetRecord(t *testing.T) {
 		t.Errorf("expected status 'threat', got: %s", record.Status)
 	}
 }
+
+func TestIPRepositoryErrors(t *testing.T) {
+	_, repo, db := initialize(t)
+	db.Close()
+
+	_, err := repo.GetByIp(context.Background(), "127.0.0.1")
+	if err == nil {
+		t.Error("expected error from GetByIp when database is closed, got nil")
+	}
+
+	_, err = repo.GetRecord(context.Background(), "127.0.0.1")
+	if err == nil {
+		t.Error("expected error from GetRecord when database is closed, got nil")
+	}
+
+	_, err = repo.ThreatCount(context.Background())
+	if err == nil {
+		t.Error("expected error from ThreatCount when database is closed, got nil")
+	}
+}

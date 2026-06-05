@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -388,5 +389,256 @@ func TestHandler_eventsFiltering(t *testing.T) {
 
 	if len(allEvents) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(allEvents))
+	}
+}
+
+func TestHandler_getTargetHost(t *testing.T) {
+	tests := []struct {
+		name     string
+		headers  map[string]string
+		host     string
+		expected string
+	}{
+		{
+			name:     "X-Real-Target",
+			headers:  map[string]string{"X-Real-Target": "real-target.com"},
+			host:     "default.com",
+			expected: "real-target.com",
+		},
+		{
+			name:     "X-Forwarded-Host",
+			headers:  map[string]string{"X-Forwarded-Host": "forwarded.com"},
+			host:     "default.com",
+			expected: "forwarded.com",
+		},
+		{
+			name:     "X-Original-Host",
+			headers:  map[string]string{"X-Original-Host": "original.com"},
+			host:     "default.com",
+			expected: "original.com",
+		},
+		{
+			name:     "Host header default",
+			headers:  map[string]string{},
+			host:     "default.com",
+			expected: "default.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/check", nil)
+			req.Host = tt.host
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			got := getTargetHost(req)
+			if got != tt.expected {
+				t.Errorf("getTargetHost() = %s; expected %s", got, tt.expected)
+			}
+		})
+	}
+}
+
+type errorDatabase struct{}
+
+func (e *errorDatabase) Update(ctx context.Context, record *model.IPRecord) (*model.IPRecord, error) {
+	return nil, errors.New("db error")
+}
+func (e *errorDatabase) GetRecord(ctx context.Context, ip string) (*model.IPRecord, error) {
+	return nil, errors.New("db error")
+}
+
+func TestHandler_checkHandler_AD_Error(t *testing.T) {
+	db := &errorDatabase{}
+	adService, err := activedefence.NewService(db, nil, "24h", []string{"\\.env"})
+	if err != nil {
+		t.Fatalf("failed to create adService: %v", err)
+	}
+
+	router := NewRouter(nil, adService, false, true, 5*time.Second, nil, 7)
+
+	req := httptest.NewRequest("GET", "/check", nil)
+	req.Header.Set("X-Client-IP", "1.1.1.1")
+	req.Header.Set("X-Original-URI", "/.env")
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, rr.Code)
+	}
+}
+
+func TestHandler_statusHandler(t *testing.T) {
+	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7)
+
+	req := httptest.NewRequest("GET", "/api/v1/status", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var status model.SystemStatus
+	if err := json.Unmarshal(rr.Body.Bytes(), &status); err != nil {
+		t.Fatalf("failed to unmarshal status: %v", err)
+	}
+
+	if status.LiveStreamRetentionDays != 7 {
+		t.Errorf("expected retention days 7, got %d", status.LiveStreamRetentionDays)
+	}
+}
+
+func TestHandler_reportThreatHandler_Errors(t *testing.T) {
+	routerNoAD := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7)
+	req := httptest.NewRequest("POST", "/report-threat", nil)
+	rr := httptest.NewRecorder()
+	routerNoAD.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404 when AD is disabled, got %d", rr.Code)
+	}
+
+	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
+	adService, _ := activedefence.NewService(db, nil, "24h", []string{})
+	router := NewRouter(nil, adService, false, false, 5*time.Second, nil, 7)
+
+	reqRemote := httptest.NewRequest("POST", "/report-threat", nil)
+	reqRemote.RemoteAddr = "invalid-ip-port"
+	rrRemote := httptest.NewRecorder()
+	router.ServeHTTP(rrRemote, reqRemote)
+	if rrRemote.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 with invalid remote addr, got %d", rrRemote.Code)
+	}
+
+	reqRemoteValid := httptest.NewRequest("POST", "/report-threat", nil)
+	reqRemoteValid.RemoteAddr = "1.2.3.4:1234"
+	rrRemoteValid := httptest.NewRecorder()
+	router.ServeHTTP(rrRemoteValid, reqRemoteValid)
+	if rrRemoteValid.Code != http.StatusOK {
+		t.Errorf("expected 200 with valid RemoteAddr, got %d", rrRemoteValid.Code)
+	}
+
+	dbError := &errorDatabase{}
+	adServiceErr, _ := activedefence.NewService(dbError, nil, "24h", []string{})
+	routerErr := NewRouter(nil, adServiceErr, false, false, 5*time.Second, nil, 7)
+	reqErr := httptest.NewRequest("POST", "/report-threat", nil)
+	reqErr.Header.Set("X-Client-IP", "1.1.1.1")
+	rrErr := httptest.NewRecorder()
+	routerErr.ServeHTTP(rrErr, reqErr)
+	if rrErr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 when ReportThreat fails, got %d", rrErr.Code)
+	}
+}
+
+func TestHandler_eventsHandler_Params(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "repgate.db")
+	dbConn, err := storage.OpenSQLiteDB(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open test db: %v", err)
+	}
+	defer dbConn.Close()
+
+	if err := storage.RunMigrations(dbConn, "../../db/migrations"); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	eventRepo := storage.NewEventRepository(dbConn)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, eventRepo, 7)
+
+	eventRepo.Insert(context.Background(), &model.Event{
+		IP: "1.1.1.1", Action: "allow", Source: "System", Timestamp: time.Now(),
+	})
+
+	reqLimitInvalid := httptest.NewRequest("GET", "/api/v1/events?limit=invalid", nil)
+	rrLimitInvalid := httptest.NewRecorder()
+	router.ServeHTTP(rrLimitInvalid, reqLimitInvalid)
+	if rrLimitInvalid.Code != http.StatusOK {
+		t.Errorf("expected 200 with invalid limit, got %d", rrLimitInvalid.Code)
+	}
+
+	reqLimitHigh := httptest.NewRequest("GET", "/api/v1/events?limit=200", nil)
+	rrLimitHigh := httptest.NewRecorder()
+	router.ServeHTTP(rrLimitHigh, reqLimitHigh)
+	if rrLimitHigh.Code != http.StatusOK {
+		t.Errorf("expected 200 with high limit, got %d", rrLimitHigh.Code)
+	}
+
+	reqBeforeID := httptest.NewRequest("GET", "/api/v1/events?before_id=10", nil)
+	rrBeforeID := httptest.NewRecorder()
+	router.ServeHTTP(rrBeforeID, reqBeforeID)
+	if rrBeforeID.Code != http.StatusOK {
+		t.Errorf("expected 200 with before_id, got %d", rrBeforeID.Code)
+	}
+
+	routerNoRepo := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7)
+	reqNoRepo := httptest.NewRequest("GET", "/api/v1/events", nil)
+	rrNoRepo := httptest.NewRecorder()
+	routerNoRepo.ServeHTTP(rrNoRepo, reqNoRepo)
+	if rrNoRepo.Code != http.StatusOK {
+		t.Errorf("expected 200 when eventRepo is nil, got %d", rrNoRepo.Code)
+	}
+
+	dbConn.Close()
+	reqDBErr := httptest.NewRequest("GET", "/api/v1/events", nil)
+	rrDBErr := httptest.NewRecorder()
+	router.ServeHTTP(rrDBErr, reqDBErr)
+	if rrDBErr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on db query error, got %d", rrDBErr.Code)
+	}
+}
+
+func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
+	handler := &Handler{
+		retentionDays: 7,
+		eventChan:     make(chan model.Event, 100),
+		subscribers:   make(map[chan model.Event]struct{}),
+	}
+	go handler.startEventProcessor()
+	defer close(handler.eventChan)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest("GET", "/api/v1/stream/logs", nil).WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		handler.streamLogsHandler(rr, req)
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	handler.queueEvent("10.10.10.10", "host.com", "/path", "block", "System")
+
+	time.Sleep(50 * time.Millisecond)
+
+	cancel()
+	<-done
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected stream code 200, got %d", rr.Code)
+	}
+	bodyStr := rr.Body.String()
+	if !strings.Contains(bodyStr, "10.10.10.10") {
+		t.Errorf("expected event in stream, body: %q", bodyStr)
+	}
+}
+
+func TestHandler_staticRoutes(t *testing.T) {
+	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7)
+
+	reqIndex := httptest.NewRequest("GET", "/", nil)
+	rrIndex := httptest.NewRecorder()
+	router.ServeHTTP(rrIndex, reqIndex)
+
+	req404 := httptest.NewRequest("GET", "/api/v1/nonexistent", nil)
+	rr404 := httptest.NewRecorder()
+	router.ServeHTTP(rr404, req404)
+	if rr404.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for nonexistent API route, got %d", rr404.Code)
 	}
 }

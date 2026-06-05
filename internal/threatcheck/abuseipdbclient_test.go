@@ -347,3 +347,54 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestAbuseIPDBClient_DatabaseErrors(t *testing.T) {
+	db, dbPath := setupTestDB(t)
+	defer db.Close()
+	defer os.Remove(dbPath)
+
+	cfg := &config.Config{
+		LogLevel: "debug",
+		FailOpen: false,
+	}
+	cfg.AbuseIPDB.Enabled = true
+	cfg.AbuseIPDB.APIKey = "test-key"
+	cfg.AbuseIPDB.ConfidenceScoreThreshold = 90
+	cfg.AbuseIPDB.CacheMaxSize = 10
+	cfg.AbuseIPDB.ExpirationTime = 1 * time.Hour
+
+	repo := storage.NewIPRepository(db, cfg)
+	client := NewAbuseIPDBClient(cfg, repo)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 95}}`)
+	}))
+	defer server.Close()
+	client.Client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s"
+
+	// Close the DB to trigger errors
+	db.Close()
+
+	// 1. CheckIP triggers abuseiddbRequest which triggers repo.GetRecord (fails)
+	_, err := client.CheckIP(context.Background(), "8.8.8.8")
+	if err == nil {
+		t.Error("expected error when DB is closed")
+	}
+
+	// 2. Test cleanExpiredIP DB error path
+	db2, dbPath2 := setupTestDB(t)
+	defer db2.Close()
+	defer os.Remove(dbPath2)
+
+	repo2 := storage.NewIPRepository(db2, cfg)
+	client2 := NewAbuseIPDBClient(cfg, repo2)
+	client2.IPCache.Set("5.5.5.5", model.IPRecord{
+		IP:        "5.5.5.5",
+		Status:    "threat",
+		ExpiresAt: time.Now().Add(-1 * time.Minute),
+	})
+
+	db2.Close()
+	_, _ = client2.CheckIP(context.Background(), "5.5.5.5")
+}

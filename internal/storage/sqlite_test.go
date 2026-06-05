@@ -31,4 +31,10 @@ func TestOpenSQLiteDB(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error with invalid path")
 	}
+
+	// Test Ping failing by passing a directory path
+	_, err = OpenSQLiteDB(tempDir)
+	if err == nil {
+		t.Fatal("expected error when opening directory as DB")
+	}
 }

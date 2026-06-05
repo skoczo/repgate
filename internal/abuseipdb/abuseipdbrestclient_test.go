@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
@@ -64,5 +65,42 @@ func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
 				t.Errorf("expected score: %d, got: %d", tt.expectedScore, score)
 			}
 		})
+	}
+}
+
+func TestAbuseIPDBRestClient_Errors(t *testing.T) {
+	// 1. url.Parse error
+	client := NewAbuseIPDBRestClient("test-key")
+	client.AbuseIPDBRestUrl = "%%invalid-url"
+	_, err := client.CheckIP(context.Background(), "127.0.0.1")
+	if err == nil {
+		t.Error("expected error with invalid URL")
+	}
+
+	// 2. HTTPClient.Do error
+	client2 := NewAbuseIPDBRestClient("test-key")
+	client2.AbuseIPDBRestUrl = "http://127.0.0.1:9999/check?ip=%s"
+	_, err = client2.CheckIP(context.Background(), "127.0.0.1")
+	if err == nil {
+		t.Error("expected error with connection refused")
+	}
+
+	// 3. context cancellation
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 85}}`)
+	}))
+	defer server.Close()
+
+	client3 := NewAbuseIPDBRestClient("test-key")
+	client3.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = client3.CheckIP(ctx, "127.0.0.1")
+	if err != context.Canceled {
+		t.Errorf("expected context.Canceled, got: %v", err)
 	}
 }
