@@ -21,6 +21,7 @@ type Config struct {
 	AbuseIPDB struct {
 		Enabled                  bool          `yaml:"enabled"`
 		APIKey                   string        `yaml:"api_key"`
+		APIURL                   string        `yaml:"api_url"`
 		ExpirationTime           time.Duration `yaml:"expiration_time"`
 		ConfidenceScoreThreshold int           `yaml:"confidence_score_threshold"`
 		CacheMaxSize             int           `yaml:"cache_max_size"`

@@ -845,7 +845,7 @@
   /* Event Row Styling */
   .event-row {
     display: grid;
-    grid-template-columns: 200px 180px 1fr;
+    grid-template-columns: 260px 180px 1fr;
     align-items: center;
     gap: 1.5rem;
     padding: 0.85rem 1.25rem;
@@ -875,8 +875,9 @@
 
   .event-meta {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
   }
 
   .event-time {

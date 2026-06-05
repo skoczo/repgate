@@ -32,10 +32,14 @@ type AbuseIPDBThreatSource struct {
 
 // initialize ipcache with max size from config
 func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository) *AbuseIPDBThreatSource {
+	client := abuseipdb.NewAbuseIPDBRestClient(cfg.AbuseIPDB.APIKey)
+	if cfg.AbuseIPDB.APIURL != "" {
+		client.AbuseIPDBRestUrl = cfg.AbuseIPDB.APIURL
+	}
 	return &AbuseIPDBThreatSource{
 		APIKey:  cfg.AbuseIPDB.APIKey,
 		Repo:    repo,
-		Client:  abuseipdb.NewAbuseIPDBRestClient(cfg.AbuseIPDB.APIKey),
+		Client:  client,
 		Config:  cfg,
 		IPCache: cache.NewIPCache(cfg.AbuseIPDB.CacheMaxSize),
 	}

@@ -202,18 +202,12 @@ func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 	if err := RunMigrations(db, "../../db/migrations"); err != nil {
 		t.Errorf("failed to run migrations: %v", err)
 	}
-	repo := NewIPRepository(db, &config.Config{AbuseIPDB: struct {
-		Enabled                  bool          `yaml:"enabled"`
-		APIKey                   string        `yaml:"api_key"`
-		ExpirationTime           time.Duration `yaml:"expiration_time"`
-		ConfidenceScoreThreshold int           `yaml:"confidence_score_threshold"`
-		CacheMaxSize             int           `yaml:"cache_max_size"`
-		CircuitBreaker           struct {
-			MaxRetries     int           `yaml:"max_retries"`
-			CoolDownPeriod time.Duration `yaml:"cool_down_period"`
-			OpenOnError    bool          `yaml:"open_on_error"`
-		} `yaml:"circuit_breaker"`
-	}{Enabled: true, APIKey: "test", ExpirationTime: 24 * time.Hour, ConfidenceScoreThreshold: 50}})
+	cfg := &config.Config{}
+	cfg.AbuseIPDB.Enabled = true
+	cfg.AbuseIPDB.APIKey = "test"
+	cfg.AbuseIPDB.ExpirationTime = 24 * time.Hour
+	cfg.AbuseIPDB.ConfidenceScoreThreshold = 50
+	repo := NewIPRepository(db, cfg)
 	return err, repo, db
 }
 
