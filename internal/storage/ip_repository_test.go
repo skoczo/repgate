@@ -260,3 +260,82 @@ func TestIPRepositoryErrors(t *testing.T) {
 		t.Error("expected error from ThreatCount when database is closed, got nil")
 	}
 }
+
+func TestIPRepositoryListRecords(t *testing.T) {
+	_, repo, db := initialize(t)
+	defer db.Close()
+
+	// Insert test data
+	now := time.Now()
+	records := []model.IPRecord{
+		{IP: "192.168.1.1", Status: "safe", Score: 5, Source: "local", CheckedAt: now, ExpiresAt: now.Add(1 * time.Hour)},
+		{IP: "192.168.1.2", Status: "threat", Score: 85, Source: "abuseipdb", CheckedAt: now, ExpiresAt: now.Add(2 * time.Hour)},
+		{IP: "10.0.0.1", Status: "threat", Score: 95, Source: "abuseipdb", CheckedAt: now, ExpiresAt: now.Add(3 * time.Hour)},
+	}
+
+	for _, rec := range records {
+		_, err := repo.Update(context.Background(), &rec)
+		if err != nil {
+			t.Fatalf("failed to insert record: %v", err)
+		}
+	}
+
+	// Test case 1: List all
+	res, total, err := repo.ListRecords(context.Background(), 10, 0, "", "", "expires_at", "DESC")
+	if err != nil {
+		t.Fatalf("ListRecords failed: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("expected 3 records, got %d", total)
+	}
+	if len(res) != 3 {
+		t.Errorf("expected 3 records returned, got %d", len(res))
+	}
+	// order should be 10.0.0.1, 192.168.1.2, 192.168.1.1 (based on expires_at DESC)
+	if res[0].IP != "10.0.0.1" || res[2].IP != "192.168.1.1" {
+		t.Errorf("incorrect ordering for expires_at DESC")
+	}
+
+	// Test case 2: Search by IP
+	res, total, err = repo.ListRecords(context.Background(), 10, 0, "192.168", "", "ip", "ASC")
+	if err != nil {
+		t.Fatalf("ListRecords search failed: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("expected 2 records matching '192.168', got %d", total)
+	}
+	if res[0].IP != "192.168.1.1" || res[1].IP != "192.168.1.2" {
+		t.Errorf("incorrect search ordering or results")
+	}
+
+	// Test case 3: Pagination (limit/offset)
+	res, total, err = repo.ListRecords(context.Background(), 1, 1, "", "", "score", "ASC")
+	if err != nil {
+		t.Fatalf("ListRecords pagination failed: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("expected total count to be 3, got %d", total)
+	}
+	if len(res) != 1 {
+		t.Errorf("expected 1 record returned, got %d", len(res))
+	}
+	// scores in ASC order: 5 (192.168.1.1), 85 (192.168.1.2), 95 (10.0.0.1). Offset 1 should return 192.168.1.2.
+	if res[0].IP != "192.168.1.2" {
+		t.Errorf("expected 192.168.1.2 at offset 1, got %s", res[0].IP)
+	}
+
+	// Test case 4: Filter by Status
+	res, total, err = repo.ListRecords(context.Background(), 10, 0, "", "threat", "ip", "ASC")
+	if err != nil {
+		t.Fatalf("ListRecords status filter failed: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("expected 2 records with status 'threat', got %d", total)
+	}
+	if len(res) != 2 {
+		t.Errorf("expected 2 records returned, got %d", len(res))
+	}
+	if res[0].IP != "10.0.0.1" || res[1].IP != "192.168.1.2" {
+		t.Errorf("incorrect status filter results")
+	}
+}

@@ -95,7 +95,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Server.Port,
-		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout, eventRepo, cfg.LiveStreamRetentionDays),
+		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout, eventRepo, cfg.LiveStreamRetentionDays, repo),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,

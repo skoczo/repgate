@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/skoczo/repgate/internal/config"
@@ -117,4 +118,70 @@ func (r *IPRepository) ThreatCount(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM ip_records WHERE status = 'threat'").Scan(&count)
 	return count, err
+}
+
+func (r *IPRepository) ListRecords(ctx context.Context, limit, offset int, search string, status string, sortBy string, sortOrder string) ([]model.IPRecord, int, error) {
+	allowedSortFields := map[string]string{
+		"ip":         "ip",
+		"status":     "status",
+		"score":      "score",
+		"source":     "source",
+		"checked_at": "checked_at",
+		"expires_at": "expires_at",
+	}
+	sortCol, ok := allowedSortFields[strings.ToLower(sortBy)]
+	if !ok {
+		sortCol = "expires_at"
+	}
+
+	orderDir := "DESC"
+	if strings.ToUpper(sortOrder) == "ASC" {
+		orderDir = "ASC"
+	}
+
+	whereClause := ""
+	var args []any
+	var conditions []string
+
+	if search != "" {
+		conditions = append(conditions, "ip LIKE ?")
+		args = append(args, "%"+search+"%")
+	}
+	if status != "" {
+		conditions = append(conditions, "status = ?")
+		args = append(args, status)
+	}
+
+	if len(conditions) > 0 {
+		whereClause = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM ip_records %s", whereClause)
+	var totalCount int
+	err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count IP records: %w", err)
+	}
+
+	query := fmt.Sprintf("SELECT ip, status, score, source, checked_at, expires_at FROM ip_records %s ORDER BY %s %s LIMIT ? OFFSET ?", whereClause, sortCol, orderDir)
+	queryArgs := append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query IP records: %w", err)
+	}
+	defer rows.Close()
+
+	var records []model.IPRecord
+	for rows.Next() {
+		var record model.IPRecord
+		if err := rows.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan IP record: %w", err)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error reading rows: %w", err)
+	}
+	return records, totalCount, nil
 }

@@ -3,10 +3,10 @@ package model
 import "time"
 
 type IPRecord struct {
-	IP        string
-	Status    string
-	Score     int
-	Source    string
-	CheckedAt time.Time
-	ExpiresAt time.Time
+	IP        string    `json:"ip"`
+	Status    string    `json:"status"`
+	Score     int       `json:"score"`
+	Source    string    `json:"source"`
+	CheckedAt time.Time `json:"checked_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }

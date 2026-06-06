@@ -21,6 +21,7 @@
     timestamp: string;
   }
 
+  let activeTab = $state<'dashboard' | 'database'>('dashboard');
   let status = $state<SystemStatus | null>(null);
   let errorMsg = $state<string | null>(null);
   let loading = $state<boolean>(true);
@@ -170,14 +171,130 @@
     }
   }
 
+  // Database Tab State
+  interface DbRecordsResponse {
+    records: IPRecord[];
+    total: number;
+  }
+
+  interface IPRecord {
+    ip: string;
+    status: string;
+    score: number;
+    source: string;
+    checked_at: string;
+    expires_at: string;
+  }
+
+  let dbRecords = $state<IPRecord[]>([]);
+  let dbTotal = $state<number>(0);
+  let dbLimit = $state<number>(25);
+  let dbOffset = $state<number>(0);
+  let dbSearch = $state<string>('');
+  let dbStatus = $state<string>('');
+  let dbSortBy = $state<string>('expires_at');
+  let dbSortOrder = $state<'asc' | 'desc'>('desc');
+  let dbLoading = $state<boolean>(false);
+  let dbError = $state<string | null>(null);
+  let nowTime = $state<number>(Date.now());
+
+  // Time remaining calculator helper
+  function getExpiresIn(expiresAtStr: string, currentTimestamp: number): string {
+    try {
+      const expiresAt = new Date(expiresAtStr);
+      const diffMs = expiresAt.getTime() - currentTimestamp;
+      if (diffMs <= 0) return 'Expired';
+      
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffDays > 0) {
+        const remainingHours = diffHours % 24;
+        return `${diffDays}d ${remainingHours}h`;
+      }
+      if (diffHours > 0) {
+        const remainingMins = diffMins % 60;
+        return `${diffHours}h ${remainingMins}m`;
+      }
+      if (diffMins > 0) {
+        const remainingSecs = diffSecs % 60;
+        return `${diffMins}m ${remainingSecs}s`;
+      }
+      return `${diffSecs}s`;
+    } catch {
+      return expiresAtStr;
+    }
+  }
+
+  async function fetchDbRecords() {
+    dbLoading = true;
+    try {
+      const queryParams = new URLSearchParams({
+        limit: dbLimit.toString(),
+        offset: dbOffset.toString(),
+        search: dbSearch,
+        status: dbStatus,
+        sort_by: dbSortBy,
+        sort_order: dbSortOrder,
+      });
+      const res = await fetch(`/api/v1/db/records?${queryParams.toString()}`);
+      if (!res.ok) {
+        throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+      const data = await res.json() as DbRecordsResponse;
+      dbRecords = data.records || [];
+      dbTotal = data.total || 0;
+      dbError = null;
+    } catch (e: any) {
+      dbError = e.message || 'Failed to fetch database records';
+      console.error(e);
+    } finally {
+      dbLoading = false;
+    }
+  }
+
+  function handleDbSearch(e: Event) {
+    e.preventDefault();
+    dbOffset = 0;
+    fetchDbRecords();
+  }
+
+  function handleDbSort(column: string) {
+    if (dbSortBy === column) {
+      dbSortOrder = dbSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      dbSortBy = column;
+      dbSortOrder = 'desc';
+    }
+    dbOffset = 0;
+    fetchDbRecords();
+  }
+
+  function handleDbPageChange(newOffset: number) {
+    dbOffset = newOffset;
+    fetchDbRecords();
+  }
+
+  function handleDbStatusChange() {
+    dbOffset = 0;
+    fetchDbRecords();
+  }
+
   onMount(() => {
     fetchStatus();
     fetchInitialEvents();
     connectSSE();
 
     const interval = setInterval(fetchStatus, 5000);
+    const countdownInterval = setInterval(() => {
+      nowTime = Date.now();
+    }, 1000);
+
     return () => {
       clearInterval(interval);
+      clearInterval(countdownInterval);
       if (sseSource) {
         sseSource.close();
       }
@@ -222,8 +339,29 @@
       <p>Initializing security dashboard...</p>
     </div>
   {:else if status}
-    <!-- Grid Layout -->
-    <div class="grid">
+    <!-- Navigation Tabs -->
+    <div class="tabs-nav">
+      <button 
+        type="button" 
+        class="tab-btn" 
+        class:active={activeTab === 'dashboard'} 
+        onclick={() => activeTab = 'dashboard'}
+      >
+        📊 Dashboard
+      </button>
+      <button 
+        type="button" 
+        class="tab-btn" 
+        class:active={activeTab === 'database'} 
+        onclick={() => { activeTab = 'database'; fetchDbRecords(); }}
+      >
+        🗄️ Database Cache
+      </button>
+    </div>
+
+    {#if activeTab === 'dashboard'}
+      <!-- Grid Layout -->
+      <div class="grid">
       
       <!-- Card 1: System Health -->
       <div class="card health-card">
@@ -424,6 +562,171 @@
         {/if}
       </div>
     </div>
+    {/if}
+
+    {#if activeTab === 'database'}
+      <div class="card db-records-card">
+        <div class="db-records-header">
+          <div class="db-title-area">
+            <span class="card-icon">🗄️</span>
+            <div>
+              <h3>Database Entities</h3>
+              <p class="card-description">View all IP reputation records stored in the SQLite database.</p>
+            </div>
+          </div>
+
+          <div class="db-actions">
+            <!-- Search form -->
+            <form class="db-search-form" onsubmit={handleDbSearch}>
+              <input 
+                type="text" 
+                placeholder="Search IP address..." 
+                bind:value={dbSearch} 
+                class="search-input"
+              />
+              <button type="submit" class="btn-search">Search</button>
+              {#if dbSearch}
+                <button 
+                  type="button" 
+                  class="btn-clear" 
+                  onclick={() => { dbSearch = ''; dbOffset = 0; fetchDbRecords(); }}
+                >
+                  Clear
+                </button>
+              {/if}
+            </form>
+
+            <!-- Status Filter -->
+            <select 
+              bind:value={dbStatus} 
+              onchange={handleDbStatusChange}
+              class="filter-select"
+            >
+              <option value="">All Statuses</option>
+              <option value="threat">Threat</option>
+              <option value="safe">Safe</option>
+            </select>
+
+            <button 
+              type="button" 
+              class="btn-refresh" 
+              onclick={fetchDbRecords} 
+              disabled={dbLoading}
+            >
+              🔄 Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Error/Loading/Empty states -->
+        {#if dbError}
+          <div class="error-alert">
+            <span class="alert-icon">⚠️</span>
+            <div class="alert-content">
+              <h4>Failed to load database records</h4>
+              <p>{dbError}</p>
+            </div>
+          </div>
+        {:else if dbLoading && dbRecords.length === 0}
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading database entities...</p>
+          </div>
+        {:else}
+          {#if dbRecords.length === 0}
+            <div class="empty-state">
+              <span class="empty-icon">📭</span>
+              <p>No database records found.</p>
+            </div>
+          {:else}
+            <!-- Records Table -->
+            <div class="table-container">
+              <table class="db-table">
+                <thead>
+                  <tr>
+                    <th onclick={() => handleDbSort('ip')} class="sortable">
+                      IP Address {dbSortBy === 'ip' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => handleDbSort('status')} class="sortable">
+                      Status {dbSortBy === 'status' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => handleDbSort('score')} class="sortable">
+                      Score {dbSortBy === 'score' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => handleDbSort('source')} class="sortable">
+                      Source {dbSortBy === 'source' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => handleDbSort('checked_at')} class="sortable">
+                      Last Checked {dbSortBy === 'checked_at' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                    <th onclick={() => handleDbSort('expires_at')} class="sortable">
+                      TTL / Deletion Countdown {dbSortBy === 'expires_at' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each dbRecords as record}
+                    <tr class="status-row-{record.status}">
+                      <td class="font-mono font-bold">{record.ip}</td>
+                      <td>
+                        <span class="badge badge-{record.status === 'allow' || record.status === 'safe' ? 'success' : record.status === 'threat' ? 'error' : 'warning'}">
+                          {record.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td class="font-mono">{record.score}%</td>
+                      <td>
+                        <span class="source-pill source-{record.source.toLowerCase().replace(/\s+/g, '-')}">
+                          {record.source}
+                        </span>
+                      </td>
+                      <td class="text-sm text-secondary">{formatTime(record.checked_at)}</td>
+                      <td>
+                        <div class="countdown-container">
+                          <span class="countdown-timer font-mono text-cyan">
+                            {getExpiresIn(record.expires_at, nowTime)}
+                          </span>
+                          <span class="countdown-timestamp text-xs text-muted">
+                            ({formatTime(record.expires_at)})
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination controls -->
+            <div class="pagination">
+              <span class="pagination-info">
+                Showing {dbOffset + 1} - {Math.min(dbOffset + dbLimit, dbTotal)} of {dbTotal} records
+              </span>
+              <div class="pagination-buttons">
+                <button 
+                  type="button" 
+                  class="btn-page" 
+                  disabled={dbOffset === 0}
+                  onclick={() => handleDbPageChange(Math.max(0, dbOffset - dbLimit))}
+                >
+                  ◀ Previous
+                </button>
+                <span class="page-num">
+                  Page {Math.floor(dbOffset / dbLimit) + 1} of {Math.ceil(dbTotal / dbLimit)}
+                </span>
+                <button 
+                  type="button" 
+                  class="btn-page" 
+                  disabled={dbOffset + dbLimit >= dbTotal}
+                  onclick={() => handleDbPageChange(dbOffset + dbLimit)}
+                >
+                  Next ▶
+                </button>
+              </div>
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
   {/if}
 
   <!-- Footer Info -->
@@ -1071,5 +1374,331 @@
 
   .live-status.disabled .status-label {
     color: var(--text-secondary);
+  }
+
+  /* Tabs Navigation Styles */
+  .tabs-nav {
+    display: flex;
+    gap: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .tab-btn {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(139, 92, 246, 0.3);
+  }
+
+  .tab-btn.active {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  }
+
+  /* Database Records Card and Header */
+  .db-records-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: 100%;
+  }
+
+  .db-records-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 1.25rem;
+  }
+
+  .db-title-area {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .db-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  /* Search Form */
+  .db-search-form {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.25rem;
+  }
+
+  .search-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    width: 220px;
+    font-family: inherit;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .btn-search {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    border: none;
+    padding: 0.45rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+
+  .btn-search:hover {
+    background: #7c3aed;
+  }
+
+  .btn-clear {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.5rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: color 0.2s ease;
+  }
+
+  .btn-clear:hover {
+    color: var(--color-error);
+  }
+
+  .btn-refresh {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.65rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .btn-refresh:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* Table Styles */
+  .table-container {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.005);
+  }
+
+  .db-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.925rem;
+  }
+
+  .db-table th {
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    user-select: none;
+  }
+
+  .db-table th.sortable {
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+  }
+
+  .db-table th.sortable:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .db-table td {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    vertical-align: middle;
+  }
+
+  .db-table tbody tr {
+    transition: background-color 0.15s ease;
+  }
+
+  .db-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.015);
+  }
+
+  .db-table tbody tr.status-row-threat:hover {
+    background: rgba(239, 68, 68, 0.015);
+  }
+
+  .font-bold {
+    font-weight: 600;
+  }
+
+  .text-sm {
+    font-size: 0.85rem;
+  }
+
+  /* Countdown & TTL Cell */
+  .countdown-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .countdown-timer {
+    font-weight: 600;
+    color: var(--accent-cyan);
+    font-size: 0.95rem;
+  }
+
+  .countdown-timestamp {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .pagination-info {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  .pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .btn-page {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .btn-page:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .btn-page:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .page-num {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  /* General alerts */
+  .error-alert {
+    display: flex;
+    gap: 1rem;
+    background: rgba(239, 68, 68, 0.07);
+    border: 1px solid rgba(239, 68, 68, 0.20);
+    padding: 1.25rem 1.5rem;
+    border-radius: 12px;
+    color: var(--text-secondary);
+  }
+
+  .error-alert h4 {
+    color: var(--color-error);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 4rem 2rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.005);
+    border: 1px dashed var(--border-color);
+    border-radius: 12px;
+  }
+
+  .empty-icon {
+    font-size: 2.5rem;
+  }
+
+  .filter-select {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+
+  .filter-select:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .filter-select option {
+    background: #0f0c1b;
+    color: var(--text-primary);
   }
 </style>
