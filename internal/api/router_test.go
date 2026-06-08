@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/activedefence"
+	"github.com/skoczo/repgate/internal/api/handlers"
 	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
@@ -433,7 +434,7 @@ func TestHandler_getTargetHost(t *testing.T) {
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
 			}
-			got := getTargetHost(req)
+			got := handlers.GetTargetHost(req)
 			if got != tt.expected {
 				t.Errorf("getTargetHost() = %s; expected %s", got, tt.expected)
 			}
@@ -591,13 +592,8 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 }
 
 func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
-	handler := &Handler{
-		retentionDays: 7,
-		eventChan:     make(chan model.Event, 100),
-		subscribers:   make(map[chan model.Event]struct{}),
-	}
-	go handler.startEventProcessor()
-	defer close(handler.eventChan)
+	handler := handlers.NewHandler(nil, nil, false, false, nil, 7, nil)
+	defer close(handler.EventChan)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -607,13 +603,13 @@ func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		handler.streamLogsHandler(rr, req)
+		handler.StreamLogsHandler(rr, req)
 		close(done)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
 
-	handler.queueEvent("10.10.10.10", "host.com", "/path", "block", "System")
+	handler.QueueEvent("10.10.10.10", "host.com", "/path", "block", "System")
 
 	time.Sleep(50 * time.Millisecond)
 
