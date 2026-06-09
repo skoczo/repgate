@@ -15,6 +15,7 @@ import (
 	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/api/handlers"
 	"github.com/skoczo/repgate/internal/config"
+	"github.com/skoczo/repgate/internal/event"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/storage"
@@ -107,7 +108,7 @@ func TestHandler_checkHanlder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(tt.threatSources, nil, tt.failOpen, false, 5*time.Second, nil, 7, nil)
+			router := NewRouter(tt.threatSources, nil, tt.failOpen, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 			req := httptest.NewRequest("GET", "/check", nil)
 			if tt.name == "invalid X-Client-IP" {
@@ -159,7 +160,7 @@ func TestHandler_honeytokenDetection(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, false, 5*time.Second, nil, 7, nil)
+	router := NewRouter(nil, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	// Call check with a honeytoken path
 	req := httptest.NewRequest("GET", "/check", nil)
@@ -192,7 +193,7 @@ func TestHandler_reportThreatHandler(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, false, 5*time.Second, nil, 7, nil)
+	router := NewRouter(nil, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	req := httptest.NewRequest("POST", "/report-threat", nil)
 	req.Header.Set("X-Client-IP", "5.6.7.8")
@@ -229,7 +230,7 @@ func TestHandler_eventsAndStreaming(t *testing.T) {
 	}
 
 	eventRepo := storage.NewEventRepository(dbConn)
-	router := NewRouter(nil, nil, false, false, 5*time.Second, eventRepo, 7, nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil)
 
 	// Trigger a check request that logs an event
 	req := httptest.NewRequest("GET", "/check", nil)
@@ -271,7 +272,7 @@ func TestHandler_eventsAndStreaming(t *testing.T) {
 }
 
 func TestHandler_eventsDisabled(t *testing.T) {
-	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 0, nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 0), nil)
 
 	// Fetching events should return StatusForbidden
 	reqHist := httptest.NewRequest("GET", "/api/v1/events", nil)
@@ -306,7 +307,7 @@ func TestHandler_eventsFiltering(t *testing.T) {
 	}
 
 	eventRepo := storage.NewEventRepository(dbConn)
-	router := NewRouter(nil, nil, false, false, 5*time.Second, eventRepo, 7, nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil)
 
 	// Insert test events
 	err = eventRepo.Insert(context.Background(), &model.Event{
@@ -458,7 +459,7 @@ func TestHandler_checkHandler_AD_Error(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, true, 5*time.Second, nil, 7, nil)
+	router := NewRouter(nil, adService, false, true, 5*time.Second, event.NewService(nil, 7), nil)
 
 	req := httptest.NewRequest("GET", "/check", nil)
 	req.Header.Set("X-Client-IP", "1.1.1.1")
@@ -472,7 +473,7 @@ func TestHandler_checkHandler_AD_Error(t *testing.T) {
 }
 
 func TestHandler_statusHandler(t *testing.T) {
-	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7, nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rr := httptest.NewRecorder()
@@ -493,7 +494,7 @@ func TestHandler_statusHandler(t *testing.T) {
 }
 
 func TestHandler_reportThreatHandler_Errors(t *testing.T) {
-	routerNoAD := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7, nil)
+	routerNoAD := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 	req := httptest.NewRequest("POST", "/report-threat", nil)
 	rr := httptest.NewRecorder()
 	routerNoAD.ServeHTTP(rr, req)
@@ -503,7 +504,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	adService, _ := activedefence.NewService(db, nil, "24h", []string{})
-	router := NewRouter(nil, adService, false, false, 5*time.Second, nil, 7, nil)
+	router := NewRouter(nil, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	reqRemote := httptest.NewRequest("POST", "/report-threat", nil)
 	reqRemote.RemoteAddr = "invalid-ip-port"
@@ -523,7 +524,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 
 	dbError := &errorDatabase{}
 	adServiceErr, _ := activedefence.NewService(dbError, nil, "24h", []string{})
-	routerErr := NewRouter(nil, adServiceErr, false, false, 5*time.Second, nil, 7, nil)
+	routerErr := NewRouter(nil, adServiceErr, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 	reqErr := httptest.NewRequest("POST", "/report-threat", nil)
 	reqErr.Header.Set("X-Client-IP", "1.1.1.1")
 	rrErr := httptest.NewRecorder()
@@ -547,7 +548,7 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 	}
 
 	eventRepo := storage.NewEventRepository(dbConn)
-	router := NewRouter(nil, nil, false, false, 5*time.Second, eventRepo, 7, nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil)
 
 	eventRepo.Insert(context.Background(), &model.Event{
 		IP: "1.1.1.1", Action: "allow", Source: "System", Timestamp: time.Now(),
@@ -574,7 +575,7 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 		t.Errorf("expected 200 with before_id, got %d", rrBeforeID.Code)
 	}
 
-	routerNoRepo := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7, nil)
+	routerNoRepo := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 	reqNoRepo := httptest.NewRequest("GET", "/api/v1/events", nil)
 	rrNoRepo := httptest.NewRecorder()
 	routerNoRepo.ServeHTTP(rrNoRepo, reqNoRepo)
@@ -592,8 +593,8 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 }
 
 func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
-	handler := handlers.NewHandler(nil, nil, false, false, nil, 7, nil)
-	defer close(handler.EventChan)
+	eventService := event.NewService(nil, 7)
+	handler := handlers.NewHandler(nil, nil, false, false, eventService, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -609,7 +610,7 @@ func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	handler.QueueEvent("10.10.10.10", "host.com", "/path", "block", "System")
+	eventService.Publish("10.10.10.10", "host.com", "/path", "block", "System")
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -626,7 +627,7 @@ func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
 }
 
 func TestHandler_staticRoutes(t *testing.T) {
-	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7, nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	reqIndex := httptest.NewRequest("GET", "/", nil)
 	rrIndex := httptest.NewRecorder()
@@ -657,7 +658,7 @@ func TestHandler_dbRecordsHandler(t *testing.T) {
 	cfg.AbuseIPDB.ExpirationTime = 24 * time.Hour
 	ipRepo := storage.NewIPRepository(dbConn, cfg)
 
-	router := NewRouter(nil, nil, false, false, 5*time.Second, nil, 7, ipRepo)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), ipRepo)
 
 	// Insert test data
 	now := time.Now()

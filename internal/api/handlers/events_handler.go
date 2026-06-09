@@ -4,12 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-
-	"github.com/skoczo/repgate/internal/model"
 )
 
 func (h *Handler) EventsHandler(w http.ResponseWriter, r *http.Request) {
-	if h.RetentionDays == 0 {
+	if h.EventService == nil || h.EventService.RetentionDays() == 0 {
 		h.sendResponse(w, http.StatusForbidden, map[string]string{"error": "Livestream functionality is disabled"})
 		return
 	}
@@ -38,12 +36,7 @@ func (h *Handler) EventsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.EventRepo == nil {
-		h.sendResponse(w, http.StatusOK, []model.Event{})
-		return
-	}
-
-	events, err := h.EventRepo.GetEvents(r.Context(), beforeID, limit, action)
+	events, err := h.EventService.GetEvents(r.Context(), beforeID, limit, action)
 	if err != nil {
 		slog.Error("failed to fetch events from repository", "error", err)
 		h.sendResponse(w, http.StatusInternalServerError, map[string]string{"error": "Failed to fetch events"})

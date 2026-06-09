@@ -42,6 +42,11 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	retDays := 0
+	if h.EventService != nil {
+		retDays = h.EventService.RetentionDays()
+	}
+
 	status := model.SystemStatus{
 		Uptime:                  uptimeDuration.String(),
 		FailOpen:                h.FailOpen,
@@ -49,8 +54,8 @@ func (h *Handler) StatusHandler(w http.ResponseWriter, r *http.Request) {
 		L1CacheCapacity:         l1Capacity,
 		L2CacheEntries:          l2Entries,
 		L2ThreatEntries:         l2Threats,
-		LiveStreamDisabled:      h.RetentionDays == 0,
-		LiveStreamRetentionDays: h.RetentionDays,
+		LiveStreamDisabled:      retDays == 0,
+		LiveStreamRetentionDays: retDays,
 	}
 
 	h.sendResponse(w, http.StatusOK, status)

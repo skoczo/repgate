@@ -24,7 +24,7 @@ type AbuseIPDBRestClient struct {
 func NewAbuseIPDBRestClient(apiKey string) *AbuseIPDBRestClient {
 	return &AbuseIPDBRestClient{
 		APIKey:           apiKey,
-		AbuseIPDBRestUrl: "https://api.abuseipdb.com/api/v2/check?ipAddress=%s&maxAgeInDays=90",
+		AbuseIPDBRestUrl: "https://api.abuseipdb.com/api/v2/check",
 		HTTPClient:       &http.Client{Timeout: 3 * time.Second},
 		requestGroup:     &singleflight.Group{},
 	}
@@ -44,10 +44,9 @@ func (c *AbuseIPDBRestClient) CheckIP(ctx context.Context, ip string) (int, erro
 
 		q := u.Query()
 		q.Set("ipAddress", ip)
+		q.Set("maxAgeInDays", "90")
 		u.RawQuery = q.Encode()
 
-		// Use a decoupled context with configured HTTP timeout to prevent single request cancels
-		// from aborting shared singleflight HTTP executions for other concurrent waiters.
 		ctxHTTP, cancel := context.WithTimeout(context.Background(), c.HTTPClient.Timeout)
 		defer cancel()
 
@@ -74,7 +73,6 @@ func (c *AbuseIPDBRestClient) CheckIP(ctx context.Context, ip string) (int, erro
 			} `json:"data"`
 		}
 
-		// print full body for debugging purposes
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return 0, err

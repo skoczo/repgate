@@ -15,6 +15,7 @@ import (
 	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/api"
 	"github.com/skoczo/repgate/internal/config"
+	"github.com/skoczo/repgate/internal/event"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/storage"
 	"github.com/skoczo/repgate/internal/threatcheck"
@@ -42,18 +43,24 @@ func main() {
 	// Ensure the database connection is closed when the application exits
 	defer db.Close()
 
-	// build threat sources based on config
-	repo := storage.NewIPRepository(db, cfg)
+	// Create repositories
+	ipRepo := storage.NewIPRepository(db, cfg)
 	eventRepo := storage.NewEventRepository(db)
-	threatSources := buildThreadSources(cfg, repo)
 
-	if count, err := repo.Count(context.Background()); err == nil {
+	// Create services
+	eventService := event.NewService(eventRepo, cfg.LiveStreamRetentionDays)
+
+	// Build threat sources based on config
+	threatSources := buildThreadSources(cfg, ipRepo)
+
+	// Set initial metrics
+	if count, err := ipRepo.Count(context.Background()); err == nil {
 		metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
 	} else {
 		slog.Error("Failed to get initial database record count", "error", err)
 	}
 
-	if threatCount, err := repo.ThreatCount(context.Background()); err == nil {
+	if threatCount, err := ipRepo.ThreatCount(context.Background()); err == nil {
 		metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
 	} else {
 		slog.Error("Failed to get initial database threat count", "error", err)
@@ -70,7 +77,7 @@ func main() {
 	}
 
 	// start background worker to periodically clean expired records from db, events, and caches
-	go startCleanupWorker(repo, eventRepo, cfg.LiveStreamRetentionDays, threatSources)
+	go startCleanupWorker(ipRepo, eventRepo, cfg.LiveStreamRetentionDays, threatSources)
 
 	slog.Info("Configuration loaded successfully", "AbuseIPDBEnabled", cfg.AbuseIPDB.Enabled)
 
@@ -83,7 +90,7 @@ func main() {
 			}
 		}
 		var err error
-		adService, err = activedefence.NewService(repo, caches, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
+		adService, err = activedefence.NewService(ipRepo, caches, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
 		if err != nil {
 			slog.Error("Failed to initialize active defence service", "error", err)
 			os.Exit(1)
@@ -91,11 +98,11 @@ func main() {
 		slog.Info("Active defence service initialized", "honeytoken_paths_count", len(cfg.ActiveDefence.HoneytokenPaths))
 	}
 
-	slog.Info("Starting IP Auth Server")
+	slog.Info("Starting HTTP Server")
 
 	server := &http.Server{
 		Addr:              cfg.Server.Port,
-		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout, eventRepo, cfg.LiveStreamRetentionDays, repo),
+		Handler:           api.NewRouter(threatSources, adService, cfg.FailOpen, cfg.LogSafeIPs, cfg.Server.ReadTimeout, eventService, ipRepo),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
@@ -196,5 +203,3 @@ func createDBAndRunDBMigrations() *sql.DB {
 	}
 	return db
 }
-
-

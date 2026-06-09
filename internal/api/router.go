@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/api/handlers"
+	"github.com/skoczo/repgate/internal/event"
 	"github.com/skoczo/repgate/internal/storage"
 	"github.com/skoczo/repgate/internal/threatcheck"
 	"github.com/skoczo/repgate/web"
@@ -25,8 +26,8 @@ const (
 )
 
 // NewRouter configures routes, sets up middlewares, and registers handlers.
-func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, timeout time.Duration, eventRepo *storage.EventRepository, retentionDays int, ipRepo *storage.IPRepository) http.Handler {
-	h := handlers.NewHandler(threatSources, adService, failOpen, logSafeIPs, eventRepo, retentionDays, ipRepo)
+func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, timeout time.Duration, eventService *event.Service, ipRepo *storage.IPRepository) http.Handler {
+	h := handlers.NewHandler(threatSources, adService, failOpen, logSafeIPs, eventService, ipRepo)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)

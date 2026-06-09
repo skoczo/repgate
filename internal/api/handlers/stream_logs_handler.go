@@ -8,7 +8,7 @@ import (
 )
 
 func (h *Handler) StreamLogsHandler(w http.ResponseWriter, r *http.Request) {
-	if h.RetentionDays == 0 {
+	if h.EventService == nil || h.EventService.RetentionDays() == 0 {
 		http.Error(w, "Livestream functionality is disabled", http.StatusForbidden)
 		return
 	}
@@ -24,8 +24,8 @@ func (h *Handler) StreamLogsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	ch := h.subscribe()
-	defer h.unsubscribe(ch)
+	ch := h.EventService.Subscribe()
+	defer h.EventService.Unsubscribe(ch)
 
 	_, _ = fmt.Fprintf(w, ": ok\n\n")
 	flusher.Flush()

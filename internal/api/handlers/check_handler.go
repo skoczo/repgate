@@ -62,7 +62,7 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			slog.Warn("Threat IP detected via honeytoken path", "ip", ip, "target_host", targetHost, "target_path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
 			h.Metrics.ThreatCount.WithLabelValues(targetHost).Inc()
-			h.QueueEvent(ip, targetHost, targetPath, "block", "ActiveDefence")
+			h.PublishEvent(ip, targetHost, targetPath, "block", "ActiveDefence")
 			h.sendResponse(w, http.StatusForbidden, "IP is a threat")
 			return
 		}
@@ -83,7 +83,7 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err, "alert_id", alerts.ThreatSourceCheckError.ID, "alert_name", alerts.ThreatSourceCheckError.Name)
 			if h.FailOpen {
-				h.QueueEvent(ip, targetHost, targetPath, "allow", source.Name()+" (FailOpen)")
+				h.PublishEvent(ip, targetHost, targetPath, "allow", source.Name()+" (FailOpen)")
 				h.sendResponse(w, http.StatusOK, "Source is not available")
 				return
 			}
@@ -96,7 +96,7 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		if result.IsThreat {
 			slog.Warn("Threat IP detected", "ip", ip, "target_host", targetHost, "target_path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
 			h.Metrics.ThreatCount.WithLabelValues(targetHost).Inc()
-			h.QueueEvent(ip, targetHost, targetPath, "block", result.Source)
+			h.PublishEvent(ip, targetHost, targetPath, "block", result.Source)
 			h.sendResponse(w, http.StatusForbidden, "IP is a threat")
 			return
 		}
@@ -109,6 +109,6 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		slog.Info("Safe IP detected", "ip", ip, "target_host", targetHost, "target_path", targetPath)
 	}
 
-	h.QueueEvent(ip, targetHost, targetPath, "allow", "System")
+	h.PublishEvent(ip, targetHost, targetPath, "allow", "System")
 	h.sendResponse(w, http.StatusOK, "IP is not a threat")
 }
