@@ -38,6 +38,10 @@ func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefenc
 		source.SetMetrics(h.Metrics)
 	}
 
+	if adService != nil {
+		adService.SetMetrics(h.Metrics)
+	}
+
 	// Routes with timeout middleware
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(timeout))

@@ -32,6 +32,7 @@ type Service struct {
 	expirationTime time.Duration
 	isPermanent    bool
 	honeytoken     []*regexp.Regexp
+	metrics        *metrics.Metrics
 }
 
 // NewService instantiates a new active defence service
@@ -57,6 +58,11 @@ func NewService(db Database, caches []Cache, expTimeStr string, honeytokenPaths 
 		isPermanent:    isPermanent,
 		honeytoken:     regexes,
 	}, nil
+}
+
+// SetMetrics sets the metrics tracker for the service
+func (s *Service) SetMetrics(m *metrics.Metrics) {
+	s.metrics = m
 }
 
 // IsHoneytoken checks if the given request path matches any honeytoken pattern
@@ -112,12 +118,14 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 	}
 
 	// Update metrics
-	if existingRecord == nil {
-		metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Inc()
-		metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Inc()
-	} else {
-		if existingRecord.Status != "threat" {
-			metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Inc()
+	if s.metrics != nil {
+		if existingRecord == nil {
+			s.metrics.AbuseIpDbDatabaseEntitiesCount.Inc()
+			s.metrics.AbuseIpDbDatabaseThreatsCount.Inc()
+		} else {
+			if existingRecord.Status != "threat" {
+				s.metrics.AbuseIpDbDatabaseThreatsCount.Inc()
+			}
 		}
 	}
 
