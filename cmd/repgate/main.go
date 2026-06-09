@@ -161,11 +161,13 @@ func startCleanupWorker(repo *storage.IPRepository, eventRepo *storage.EventRepo
 		}
 
 		// Clean up expired events
-		cutoff := now.AddDate(0, 0, -retentionDays)
-		if affected, err := eventRepo.DeleteOlderThan(context.Background(), cutoff); err != nil {
-			slog.Error("Failed to delete expired events", "error", err)
-		} else if affected > 0 {
-			slog.Info("Cleaned up expired live stream events", "count", affected, "cutoff", cutoff)
+		if retentionDays > 0 {
+			cutoff := now.AddDate(0, 0, -retentionDays)
+			if affected, err := eventRepo.DeleteOlderThan(context.Background(), cutoff); err != nil {
+				slog.Error("Failed to delete expired events", "error", err)
+			} else if affected > 0 {
+				slog.Info("Cleaned up expired live stream events", "count", affected, "cutoff", cutoff)
+			}
 		}
 	}
 }
