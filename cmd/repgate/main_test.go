@@ -44,19 +44,19 @@ func TestSetLogger(t *testing.T) {
 	}
 }
 
-func TestBuildThreadSources(t *testing.T) {
+func TestBuildThreatSources(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.AbuseIPDB.Enabled = true
 
 	repo := &storage.IPRepository{}
-	sources := buildThreadSources(cfg, repo)
+	sources := buildThreatSources(cfg, repo)
 
 	if len(sources) != 1 {
 		t.Errorf("expected 1 source, got %d", len(sources))
 	}
 
 	cfg.AbuseIPDB.Enabled = false
-	sources = buildThreadSources(cfg, repo)
+	sources = buildThreatSources(cfg, repo)
 
 	if len(sources) != 0 {
 		t.Errorf("expected 0 sources, got %d", len(sources))

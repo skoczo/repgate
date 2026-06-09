@@ -51,7 +51,7 @@ func main() {
 	eventService := event.NewService(eventRepo, cfg.LiveStreamRetentionDays)
 
 	// Build threat sources based on config
-	threatSources := buildThreadSources(cfg, ipRepo)
+	threatSources := buildThreatSources(cfg, ipRepo)
 
 	// Set initial metrics
 	if count, err := ipRepo.Count(context.Background()); err == nil {
@@ -130,7 +130,7 @@ func main() {
 	slog.Info("Server exited")
 }
 
-func buildThreadSources(cfg *config.Config, repo *storage.IPRepository) []threatcheck.ThreatSource {
+func buildThreatSources(cfg *config.Config, repo *storage.IPRepository) []threatcheck.ThreatSource {
 	var sources []threatcheck.ThreatSource
 	if cfg.AbuseIPDB.Enabled {
 		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo))

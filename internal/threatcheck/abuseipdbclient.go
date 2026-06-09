@@ -221,12 +221,12 @@ func (c *AbuseIPDBThreatSource) abuseiddbRequest(ctx context.Context, ip string)
 func (c *AbuseIPDBThreatSource) createResult(ip string, score int, source string) ThreatCheckResult {
 	return ThreatCheckResult{
 		IP:       ip,
-		IsThreat: c.isThread(score),
+		IsThreat: c.isThreat(score),
 		Source:   source,
 	}
 }
 
-func (c *AbuseIPDBThreatSource) isThread(score int) bool {
+func (c *AbuseIPDBThreatSource) isThreat(score int) bool {
 	if score >= c.Config.AbuseIPDB.ConfidenceScoreThreshold {
 		return true
 	}
