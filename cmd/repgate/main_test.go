@@ -49,14 +49,14 @@ func TestBuildThreatSources(t *testing.T) {
 	cfg.AbuseIPDB.Enabled = true
 
 	repo := &storage.IPRepository{}
-	sources := buildThreatSources(cfg, repo)
+	sources, _ := buildThreatSources(cfg, repo)
 
 	if len(sources) != 1 {
 		t.Errorf("expected 1 source, got %d", len(sources))
 	}
 
 	cfg.AbuseIPDB.Enabled = false
-	sources = buildThreatSources(cfg, repo)
+	sources, _ = buildThreatSources(cfg, repo)
 
 	if len(sources) != 0 {
 		t.Errorf("expected 0 sources, got %d", len(sources))

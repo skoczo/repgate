@@ -7,10 +7,16 @@ import (
 	"github.com/skoczo/repgate/internal/metrics"
 )
 
+type CheckContext struct {
+	IP   string
+	Path string
+	Host string
+}
+
 type ThreatSource interface {
 	Name() string
 	Enabled() bool
-	CheckIP(ctx context.Context, ip string) (ThreatCheckResult, error)
+	Check(ctx context.Context, req CheckContext) (ThreatCheckResult, error)
 	CleanExpired(now time.Time)
 	SetMetrics(m *metrics.Metrics)
 }

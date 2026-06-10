@@ -79,7 +79,8 @@ func (c *AbuseIPDBThreatSource) recordFailure() {
 	c.cbLastFailed = time.Now()
 }
 
-func (c *AbuseIPDBThreatSource) CheckIP(ctx context.Context, ip string) (ThreatCheckResult, error) {
+func (c *AbuseIPDBThreatSource) Check(ctx context.Context, req CheckContext) (ThreatCheckResult, error) {
+	ip := req.IP
 
 	// update metrics in defer
 	defer func() {

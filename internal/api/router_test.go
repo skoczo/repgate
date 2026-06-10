@@ -33,7 +33,7 @@ type mockThreatSource struct {
 
 func (m *mockThreatSource) Name() string  { return m.name }
 func (m *mockThreatSource) Enabled() bool { return m.enabled }
-func (m *mockThreatSource) CheckIP(ctx context.Context, ip string) (threatcheck.ThreatCheckResult, error) {
+func (m *mockThreatSource) Check(ctx context.Context, req threatcheck.CheckContext) (threatcheck.ThreatCheckResult, error) {
 	return m.result, m.err
 }
 func (m *mockThreatSource) CleanExpired(now time.Time) {}
@@ -160,7 +160,7 @@ func TestHandler_honeytokenDetection(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	// Call check with a honeytoken path
 	req := httptest.NewRequest("GET", "/check", nil)
@@ -193,7 +193,7 @@ func TestHandler_reportThreatHandler(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	req := httptest.NewRequest("POST", "/report-threat", nil)
 	req.Header.Set("X-Client-IP", "5.6.7.8")
@@ -459,7 +459,7 @@ func TestHandler_checkHandler_AD_Error(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter(nil, adService, false, true, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, true, 5*time.Second, event.NewService(nil, 7), nil)
 
 	req := httptest.NewRequest("GET", "/check", nil)
 	req.Header.Set("X-Client-IP", "1.1.1.1")
@@ -504,7 +504,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	adService, _ := activedefence.NewService(db, nil, "24h", []string{})
-	router := NewRouter(nil, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	reqRemote := httptest.NewRequest("POST", "/report-threat", nil)
 	reqRemote.RemoteAddr = "invalid-ip-port"
@@ -524,7 +524,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 
 	dbError := &errorDatabase{}
 	adServiceErr, _ := activedefence.NewService(dbError, nil, "24h", []string{})
-	routerErr := NewRouter(nil, adServiceErr, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	routerErr := NewRouter([]threatcheck.ThreatSource{adServiceErr}, adServiceErr, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 	reqErr := httptest.NewRequest("POST", "/report-threat", nil)
 	reqErr.Header.Set("X-Client-IP", "1.1.1.1")
 	rrErr := httptest.NewRecorder()

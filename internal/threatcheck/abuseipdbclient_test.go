@@ -72,7 +72,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	}
 
 	// Test 1: IP not in cache or DB
-	res, err := client.CheckIP(context.Background(), "1.1.1.1")
+	res, err := client.Check(context.Background(), CheckContext{IP: "1.1.1.1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	}
 
 	// Test 2: IP is now in Cache
-	res, err = client.CheckIP(context.Background(), "1.1.1.1")
+	res, err = client.Check(context.Background(), CheckContext{IP: "1.1.1.1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	defer server2.Close()
 	client.Client.AbuseIPDBRestUrl = server2.URL + "?ipAddress=%s"
 
-	res, err = client.CheckIP(context.Background(), "2.2.2.2")
+	res, err = client.Check(context.Background(), CheckContext{IP: "2.2.2.2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,9 +108,8 @@ func TestAbuseIPDBClient(t *testing.T) {
 		t.Error("expected IP not to be a threat due to score 50")
 	}
 
-	// Test 3: clear cache, should be found in DB
 	client.IPCache.Remove("1.1.1.1")
-	res, err = client.CheckIP(context.Background(), "1.1.1.1")
+	res, err = client.Check(context.Background(), CheckContext{IP: "1.1.1.1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +129,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	})
 
 	// mock server returns 50 for this IP
-	res, err = client.CheckIP(context.Background(), "3.3.3.3")
+	res, err = client.Check(context.Background(), CheckContext{IP: "3.3.3.3"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -154,7 +153,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	defer serverErr.Close()
 	client.Client.AbuseIPDBRestUrl = serverErr.URL + "?ipAddress=%s"
 
-	_, err = client.CheckIP(context.Background(), "4.4.4.4")
+	_, err = client.Check(context.Background(), CheckContext{IP: "4.4.4.4"})
 	if err == nil {
 		t.Fatal("expected error on API failure")
 	}
@@ -190,27 +189,26 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	client.Client.AbuseIPDBRestUrl = errorServer.URL + "?ipAddress=%s"
 
 	// Failure 1
-	_, err := client.CheckIP(context.Background(), "10.0.0.1")
+	_, err := client.Check(context.Background(), CheckContext{IP: "10.0.0.1"})
 	if err == nil {
 		t.Fatalf("expected error on 1st API failure")
 	}
 
 	// Failure 2 - reaches MaxRetries
-	_, err = client.CheckIP(context.Background(), "10.0.0.2")
+	_, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.2"})
 	if err == nil {
 		t.Fatalf("expected error on 2nd API failure")
 	}
 
-	// Circuit should now be open.
 	// Failure 3 (Circuit Breaker rejects before making API call)
-	_, err = client.CheckIP(context.Background(), "10.0.0.3")
+	_, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.3"})
 	if err == nil || err.Error() != "circuit breaker open" {
 		t.Fatalf("expected circuit breaker open error, got: %v", err)
 	}
 
 	// Test Fail Open
 	client.Config.AbuseIPDB.CircuitBreaker.OpenOnError = true
-	res, err := client.CheckIP(context.Background(), "10.0.0.4")
+	res, err := client.Check(context.Background(), CheckContext{IP: "10.0.0.4"})
 	if err != nil {
 		t.Fatalf("expected no error when fail open is true, got: %v", err)
 	}
@@ -231,7 +229,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	client.Client.AbuseIPDBRestUrl = successServer.URL + "?ipAddress=%s"
 
 	// This request should succeed and close the circuit breaker
-	res, err = client.CheckIP(context.Background(), "10.0.0.5")
+	res, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.5"})
 	if err != nil {
 		t.Fatalf("expected successful recovery request, got error: %v", err)
 	}
@@ -243,7 +241,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	// even if we switch back to error server, it shouldn't be rejected by circuit breaker immediately
 	client.Client.AbuseIPDBRestUrl = errorServer.URL + "?ipAddress=%s"
 	client.Config.AbuseIPDB.CircuitBreaker.OpenOnError = false // Reset Fail closed
-	_, err = client.CheckIP(context.Background(), "10.0.0.6")
+	_, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.6"})
 	if err == nil || err.Error() == "circuit breaker open" {
 		t.Fatalf("expected regular API error as circuit is closed, got: %v", err)
 	}
@@ -322,7 +320,7 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 	defer server1.Close()
 	client.Client.AbuseIPDBRestUrl = server1.URL + "?ipAddress=%s"
 
-	_, err := client.CheckIP(context.Background(), "9.9.9.9")
+	_, err := client.Check(context.Background(), CheckContext{IP: "9.9.9.9"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -342,7 +340,7 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 		t.Fatalf("failed to expire record: %v", err)
 	}
 
-	_, err = client.CheckIP(context.Background(), "9.9.9.9")
+	_, err = client.Check(context.Background(), CheckContext{IP: "9.9.9.9"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -377,7 +375,7 @@ func TestAbuseIPDBClient_DatabaseErrors(t *testing.T) {
 	db.Close()
 
 	// 1. CheckIP triggers abuseiddbRequest which triggers repo.GetRecord (fails)
-	_, err := client.CheckIP(context.Background(), "8.8.8.8")
+	_, err := client.Check(context.Background(), CheckContext{IP: "8.8.8.8"})
 	if err == nil {
 		t.Error("expected error when DB is closed")
 	}
@@ -396,5 +394,5 @@ func TestAbuseIPDBClient_DatabaseErrors(t *testing.T) {
 	})
 
 	db2.Close()
-	_, _ = client2.CheckIP(context.Background(), "5.5.5.5")
+	_, _ = client2.Check(context.Background(), CheckContext{IP: "5.5.5.5"})
 }

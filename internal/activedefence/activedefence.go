@@ -12,6 +12,7 @@ import (
 
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
+	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
 // Database defines the storage operations needed by active defence
@@ -64,6 +65,40 @@ func NewService(db Database, caches []Cache, expTimeStr string, honeytokenPaths 
 func (s *Service) SetMetrics(m *metrics.Metrics) {
 	s.metrics = m
 }
+
+// Name returns the name of the threat source
+func (s *Service) Name() string {
+	return "ActiveDefence"
+}
+
+// Enabled returns whether the service is enabled (since it is instantiated, it is enabled)
+func (s *Service) Enabled() bool {
+	return true
+}
+
+// Check implements the threatcheck.ThreatSource interface.
+// It checks if the request path matches any honeytoken pattern, and if so,
+// reports it as a threat on the fly.
+func (s *Service) Check(ctx context.Context, req threatcheck.CheckContext) (threatcheck.ThreatCheckResult, error) {
+	if s.IsHoneytoken(req.Path) {
+		if err := s.ReportThreat(ctx, req.IP, req.Path); err != nil {
+			slog.Error("failed to report honeytoken threat", "ip", req.IP, "path", req.Path, "error", err)
+		}
+		return threatcheck.ThreatCheckResult{
+			IP:       req.IP,
+			IsThreat: true,
+			Source:   s.Name(),
+		}, nil
+	}
+	return threatcheck.ThreatCheckResult{
+		IP:       req.IP,
+		IsThreat: false,
+		Source:   s.Name(),
+	}, nil
+}
+
+// CleanExpired is a no-op for ActiveDefence as its cleanup is handled globally or via cache owners.
+func (s *Service) CleanExpired(now time.Time) {}
 
 // IsHoneytoken checks if the given request path matches any honeytoken pattern
 func (s *Service) IsHoneytoken(path string) bool {

@@ -51,7 +51,7 @@ func main() {
 	eventService := event.NewService(eventRepo, cfg.LiveStreamRetentionDays)
 
 	// Build threat sources based on config
-	threatSources := buildThreatSources(cfg, ipRepo)
+	threatSources, adService := buildThreatSources(cfg, ipRepo)
 
 	// Set initial metrics
 	if count, err := ipRepo.Count(context.Background()); err == nil {
@@ -80,23 +80,6 @@ func main() {
 	go startCleanupWorker(ipRepo, eventRepo, cfg.LiveStreamRetentionDays, threatSources)
 
 	slog.Info("Configuration loaded successfully", "AbuseIPDBEnabled", cfg.AbuseIPDB.Enabled)
-
-	var adService *activedefence.Service
-	if cfg.ActiveDefence.Enabled {
-		var caches []activedefence.Cache
-		for _, source := range threatSources {
-			if client, ok := source.(*threatcheck.AbuseIPDBThreatSource); ok {
-				caches = append(caches, client.IPCache)
-			}
-		}
-		var err error
-		adService, err = activedefence.NewService(ipRepo, caches, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
-		if err != nil {
-			slog.Error("Failed to initialize active defence service", "error", err)
-			os.Exit(1)
-		}
-		slog.Info("Active defence service initialized", "honeytoken_paths_count", len(cfg.ActiveDefence.HoneytokenPaths))
-	}
 
 	slog.Info("Starting HTTP Server")
 
@@ -130,12 +113,31 @@ func main() {
 	slog.Info("Server exited")
 }
 
-func buildThreatSources(cfg *config.Config, repo *storage.IPRepository) []threatcheck.ThreatSource {
+func buildThreatSources(cfg *config.Config, repo *storage.IPRepository) ([]threatcheck.ThreatSource, *activedefence.Service) {
 	var sources []threatcheck.ThreatSource
 	if cfg.AbuseIPDB.Enabled {
 		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo))
 	}
-	return sources
+
+	var adService *activedefence.Service
+	if cfg.ActiveDefence.Enabled {
+		var caches []activedefence.Cache
+		for _, source := range sources {
+			if client, ok := source.(*threatcheck.AbuseIPDBThreatSource); ok {
+				caches = append(caches, client.IPCache)
+			}
+		}
+		var err error
+		adService, err = activedefence.NewService(repo, caches, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
+		if err != nil {
+			slog.Error("Failed to initialize active defence service", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("Active defence service initialized", "honeytoken_paths_count", len(cfg.ActiveDefence.HoneytokenPaths))
+		sources = append([]threatcheck.ThreatSource{adService}, sources...)
+	}
+
+	return sources, adService
 }
 
 func startCleanupWorker(repo *storage.IPRepository, eventRepo *storage.EventRepository, retentionDays int, sources []threatcheck.ThreatSource) {

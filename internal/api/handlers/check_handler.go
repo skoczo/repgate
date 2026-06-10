@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/alerts"
+	"github.com/skoczo/repgate/internal/threatcheck"
 )
 
 func GetTargetHost(r *http.Request) string {
@@ -54,18 +55,10 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if the requested path is a honeytoken (if active defence is enabled)
-	if h.AdService != nil {
-		if h.AdService.IsHoneytoken(targetPath) {
-			if err := h.AdService.ReportThreat(r.Context(), ip, targetPath); err != nil {
-				slog.Error("failed to report honeytoken threat", "ip", ip, "path", targetPath, "error", err)
-			}
-			slog.Warn("Threat IP detected via honeytoken path", "ip", ip, "target_host", targetHost, "target_path", targetPath, "alert_id", alerts.ThreatDetected.ID, "alert_name", alerts.ThreatDetected.Name)
-			h.Metrics.ThreatCount.WithLabelValues(targetHost).Inc()
-			h.PublishEvent(ip, targetHost, targetPath, "block", "ActiveDefence")
-			h.sendResponse(w, http.StatusForbidden, "IP is a threat")
-			return
-		}
+	reqCtx := threatcheck.CheckContext{
+		IP:   ip,
+		Path: targetPath,
+		Host: targetHost,
 	}
 
 	for _, source := range h.ThreatSources {
@@ -78,7 +71,7 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		if slog.Default().Enabled(r.Context(), slog.LevelDebug) {
 			slog.Debug("checking threat source", "source", source.Name())
 		}
-		result, err := source.CheckIP(r.Context(), ip)
+		result, err := source.Check(r.Context(), reqCtx)
 
 		if err != nil {
 			slog.Error("error checking threat source", "source", source.Name(), "error", err, "alert_id", alerts.ThreatSourceCheckError.ID, "alert_name", alerts.ThreatSourceCheckError.Name)
