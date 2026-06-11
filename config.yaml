@@ -40,9 +40,14 @@ active_defence:
     - 'secrets\.yml$'
     - 'wp-login\.php'
     - 'xmlrpc\.php'
-    - '(txets|chosen|bless|blurbs|akcc|abcd|shelp|cord|dex|bolt|cjfuns|zwso|ioxi-o|insc|classwithtostring|goods|lufix|style)\.php'
+    - '(txets|chosen|bless|blurbs|akcc|abcd|shelp|cord|dex|bolt|cjfuns|zwso|ioxi-o|insc|classwithtostring|goods|lufix|style|k|g|as|cah|acp|a1|xwx1|sadcut1|3PJcpMFsD8B|wp-block)\.php'
     - 'phpinfo'
     - 'laravel\.log$'
+    - 'wp-(includes|content|admin)/'
+    - 'templates/beez3/'
+    - 'css/index\.php'
+    - 'about/function\.php'
+    - '\.info\.php'
   # Automatically report detected IPs to AbuseIPDB
   auto_report: false
   # AbuseIPDB category IDs. Default: 21 (Web App Attack)
