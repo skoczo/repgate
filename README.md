@@ -84,15 +84,24 @@ AbuseIPDB:
 
 active_defence:
   enabled: true
-  expiration_time: "permanent" # Auto-block attackers permanently
-  honeytoken_paths:
+  expiration_time: "48h" # Auto-block attackers for 48 hours (CAUTION: see warning below)
+  honeytoken_paths:            # WARNING: configure these to avoid blocking real users!
     - '\.env'
     - '\.git/'
-  auto_report: false # Automatically report detected IPs to AbuseIPDB
+  auto_report: false # Automatically report detected IPs to AbuseIPDB (CAUTION: see warning below)
   report_categories:
     - 21 # Web App Attack
   report_comment: "Honeytoken tripped"
 ```
+
+> [!CAUTION]
+> **CRITICAL SECURITY WARNING: Configure `honeytoken_paths` carefully!**
+>
+> By default, `active_defence.enabled` is `true` and `active_defence.expiration_time` is set to `"48h"` (2 days).
+> - **Self-blocking risk**: If a legitimate user or developer accesses any path matching the patterns in `honeytoken_paths` (e.g. `.env`, `.git`), they will be **blocked** from your web application for the configured duration (e.g. 48 hours, or permanently if set to `"permanent"`).
+> - **AbuseIPDB Reporting risk**: If `active_defence.auto_report` is enabled, tripped IPs will be reported to AbuseIPDB. Incorrectly configured `honeytoken_paths` can lead to reporting legitimate client IPs, potentially resulting in your AbuseIPDB account being banned for false/spam reports.
+> - **Recommendation**: Review and update `honeytoken_paths` to only match paths that *never* exist in your application. If this feature is not needed, set `enabled: false`.
+
 
 ### 4. Running
 **Using Make:**

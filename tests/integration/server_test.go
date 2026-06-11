@@ -145,7 +145,7 @@ AbuseIPDB:
 
 active_defence:
   enabled: true
-  expiration_time: "permanent"
+  expiration_time: "48h"
   honeytoken_paths:
     - '\.env'
     - 'wp-login\.php'

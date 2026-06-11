@@ -37,8 +37,8 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.ActiveDefence.Enabled != true {
 		t.Errorf("active defence is not enabled but %t", cfg.ActiveDefence.Enabled)
 	}
-	if cfg.ActiveDefence.ExpirationTime != "permanent" {
-		t.Errorf("active defence expiration time is not permanent but %s", cfg.ActiveDefence.ExpirationTime)
+	if cfg.ActiveDefence.ExpirationTime != "48h" {
+		t.Errorf("active defence expiration time is not 48h but %s", cfg.ActiveDefence.ExpirationTime)
 	}
 	if cfg.ActiveDefence.AutoReport != false {
 		t.Errorf("active defence auto report is not false but %t", cfg.ActiveDefence.AutoReport)

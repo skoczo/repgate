@@ -28,8 +28,16 @@ AbuseIPDB:
     open_on_error: true
 
 active_defence:
+  # WARNING: Active Defence automatically blocks IPs that access any of the paths listed in honeytoken_paths.
+  # If enabled: true, any matching request will result in a block for the duration specified in expiration_time (e.g. "48h").
+  # Ensure you do NOT include paths that are legitimately used by your application or developers,
+  # otherwise you will block yourselves or legitimate users.
   enabled: true
-  expiration_time: "permanent"
+  expiration_time: "48h"
+  
+  # WARNING: Review and modify these paths carefully.
+  # If your application serves wordpress files, phpinfo, or has custom routes resembling these,
+  # remove them from this list to prevent accidental blocks.
   honeytoken_paths:
     - '\.env'
     - '\.git/'
