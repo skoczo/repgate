@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/threatcheck"
@@ -28,12 +29,15 @@ type Cache interface {
 
 // Service manages active defence features
 type Service struct {
-	db             Database
-	caches         []Cache
-	expirationTime time.Duration
-	isPermanent    bool
-	honeytoken     []*regexp.Regexp
-	metrics        *metrics.Metrics
+	db               Database
+	caches           []Cache
+	expirationTime   time.Duration
+	isPermanent      bool
+	honeytoken       []*regexp.Regexp
+	metrics          *metrics.Metrics
+	autoReport       bool
+	reportCategories []int
+	reportComment    string
 }
 
 // NewService instantiates a new active defence service
@@ -64,6 +68,13 @@ func NewService(db Database, caches []Cache, expTimeStr string, honeytokenPaths 
 // SetMetrics sets the metrics tracker for the service
 func (s *Service) SetMetrics(m *metrics.Metrics) {
 	s.metrics = m
+}
+
+// SetAutoReport enables or disables automatic reporting to AbuseIPDB
+func (s *Service) SetAutoReport(enabled bool, categories []int, comment string) {
+	s.autoReport = enabled
+	s.reportCategories = categories
+	s.reportComment = comment
 }
 
 // Name returns the name of the threat source
@@ -165,7 +176,37 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 	}
 
 	slog.Warn("Honeytoken tripped! Source IP added to threat database and cache", "ip", ip, "path", path)
+
+	s.reportToAbuseIPDB(path, ip)
+
 	return nil
+}
+
+func (s *Service) reportToAbuseIPDB(path string, ip string) {
+	if s.autoReport {
+		if client := abuseipdb.GetClient(); client != nil {
+			categories := s.reportCategories
+			if len(categories) == 0 {
+				categories = []int{21} // Default: Web App Attack
+			}
+			comment := s.reportComment
+			if comment == "" {
+				comment = fmt.Sprintf("Honeytoken tripped: request to %s", path)
+			} else {
+				comment = fmt.Sprintf("%s: %s", comment, path)
+			}
+			go func() {
+				slog.Info("reporting threat IP to AbuseIPDB", "ip", ip, "categories", categories, "comment", comment)
+				if err := client.ReportIP(context.Background(), ip, categories, comment); err != nil {
+					slog.Error("failed to report threat IP to AbuseIPDB", "ip", ip, "error", err)
+				} else {
+					slog.Info("successfully reported threat IP to AbuseIPDB", "ip", ip)
+				}
+			}()
+		} else {
+			slog.Warn("AbuseIPDB client not initialized, skipping auto report", "ip", ip)
+		}
+	}
 }
 
 // parseExpirationTime converts configuration string to duration/permanent flag

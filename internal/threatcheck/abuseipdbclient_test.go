@@ -61,7 +61,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 	defer server.Close()
 
 	client := NewAbuseIPDBClient(cfg, repo)
-	client.Client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s"
 
 	if client.Name() != "AbuseIPDB" {
 		t.Errorf("expected name AbuseIPDB, got %s", client.Name())
@@ -98,7 +98,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 50}}`)
 	}))
 	defer server2.Close()
-	client.Client.AbuseIPDBRestUrl = server2.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = server2.URL + "?ipAddress=%s"
 
 	res, err = client.Check(context.Background(), CheckContext{IP: "2.2.2.2"})
 	if err != nil {
@@ -151,7 +151,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer serverErr.Close()
-	client.Client.AbuseIPDBRestUrl = serverErr.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = serverErr.URL + "?ipAddress=%s"
 
 	_, err = client.Check(context.Background(), CheckContext{IP: "4.4.4.4"})
 	if err == nil {
@@ -186,7 +186,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	defer errorServer.Close()
 
 	client := NewAbuseIPDBClient(cfg, repo)
-	client.Client.AbuseIPDBRestUrl = errorServer.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = errorServer.URL + "?ipAddress=%s"
 
 	// Failure 1
 	_, err := client.Check(context.Background(), CheckContext{IP: "10.0.0.1"})
@@ -226,7 +226,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 20}}`)
 	}))
 	defer successServer.Close()
-	client.Client.AbuseIPDBRestUrl = successServer.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = successServer.URL + "?ipAddress=%s"
 
 	// This request should succeed and close the circuit breaker
 	res, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.5"})
@@ -239,7 +239,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 
 	// We can verify that circuit is fully closed by making another request,
 	// even if we switch back to error server, it shouldn't be rejected by circuit breaker immediately
-	client.Client.AbuseIPDBRestUrl = errorServer.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = errorServer.URL + "?ipAddress=%s"
 	client.Config.AbuseIPDB.CircuitBreaker.OpenOnError = false // Reset Fail closed
 	_, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.6"})
 	if err == nil || err.Error() == "circuit breaker open" {
@@ -318,7 +318,7 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 95}}`)
 	}))
 	defer server1.Close()
-	client.Client.AbuseIPDBRestUrl = server1.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = server1.URL + "?ipAddress=%s"
 
 	_, err := client.Check(context.Background(), CheckContext{IP: "9.9.9.9"})
 	if err != nil {
@@ -331,7 +331,7 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 20}}`)
 	}))
 	defer server2.Close()
-	client.Client.AbuseIPDBRestUrl = server2.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = server2.URL + "?ipAddress=%s"
 
 	client.IPCache.Remove("9.9.9.9")
 	// Make it look expired in DB
@@ -369,7 +369,7 @@ func TestAbuseIPDBClient_DatabaseErrors(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 95}}`)
 	}))
 	defer server.Close()
-	client.Client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s"
+	client.Client.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s"
 
 	// Close the DB to trigger errors
 	db.Close()

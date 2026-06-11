@@ -40,6 +40,15 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.ActiveDefence.ExpirationTime != "permanent" {
 		t.Errorf("active defence expiration time is not permanent but %s", cfg.ActiveDefence.ExpirationTime)
 	}
+	if cfg.ActiveDefence.AutoReport != false {
+		t.Errorf("active defence auto report is not false but %t", cfg.ActiveDefence.AutoReport)
+	}
+	if len(cfg.ActiveDefence.ReportCategories) != 1 || cfg.ActiveDefence.ReportCategories[0] != 21 {
+		t.Errorf("active defence report categories is not [21] but %v", cfg.ActiveDefence.ReportCategories)
+	}
+	if cfg.ActiveDefence.ReportComment != "Honeytoken tripped" {
+		t.Errorf("active defence report comment is not 'Honeytoken tripped' but %q", cfg.ActiveDefence.ReportComment)
+	}
 }
 
 func TestLoadConfigInvalidFile(t *testing.T) {

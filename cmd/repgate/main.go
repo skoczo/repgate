@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/api"
 	"github.com/skoczo/repgate/internal/config"
@@ -47,24 +48,14 @@ func main() {
 	ipRepo := storage.NewIPRepository(db, cfg)
 	eventRepo := storage.NewEventRepository(db)
 
-	// Create services
+	// Create service for gui event subscription
 	eventService := event.NewService(eventRepo, cfg.LiveStreamRetentionDays)
 
 	// Build threat sources based on config
 	threatSources, adService := buildThreatSources(cfg, ipRepo)
 
-	// Set initial metrics
-	if count, err := ipRepo.Count(context.Background()); err == nil {
-		metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
-	} else {
-		slog.Error("Failed to get initial database record count", "error", err)
-	}
-
-	if threatCount, err := ipRepo.ThreatCount(context.Background()); err == nil {
-		metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
-	} else {
-		slog.Error("Failed to get initial database threat count", "error", err)
-	}
+	// Initialize metrics
+	initializeMetrics(ipRepo)
 
 	// Perform initial cleanup of expired events at startup if retention is enabled (> 0)
 	if cfg.LiveStreamRetentionDays > 0 {
@@ -113,7 +104,28 @@ func main() {
 	slog.Info("Server exited")
 }
 
+func initializeMetrics(ipRepo *storage.IPRepository) {
+	if count, err := ipRepo.Count(context.Background()); err == nil {
+		metrics.GetMetrics().AbuseIpDbDatabaseEntitiesCount.Set(float64(count))
+	} else {
+		slog.Error("Failed to get initial database record count", "error", err)
+	}
+
+	if threatCount, err := ipRepo.ThreatCount(context.Background()); err == nil {
+		metrics.GetMetrics().AbuseIpDbDatabaseThreatsCount.Set(float64(threatCount))
+	} else {
+		slog.Error("Failed to get initial database threat count", "error", err)
+	}
+}
+
 func buildThreatSources(cfg *config.Config, repo *storage.IPRepository) ([]threatcheck.ThreatSource, *activedefence.Service) {
+	if cfg.AbuseIPDB.APIKey != "" {
+		client := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
+		if cfg.AbuseIPDB.APIURL != "" {
+			client.AbuseIPDBRestCheckUrl = cfg.AbuseIPDB.APIURL
+		}
+	}
+
 	var sources []threatcheck.ThreatSource
 	if cfg.AbuseIPDB.Enabled {
 		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo))
@@ -133,7 +145,10 @@ func buildThreatSources(cfg *config.Config, repo *storage.IPRepository) ([]threa
 			slog.Error("Failed to initialize active defence service", "error", err)
 			os.Exit(1)
 		}
-		slog.Info("Active defence service initialized", "honeytoken_paths_count", len(cfg.ActiveDefence.HoneytokenPaths))
+		if cfg.ActiveDefence.AutoReport {
+			adService.SetAutoReport(true, cfg.ActiveDefence.ReportCategories, cfg.ActiveDefence.ReportComment)
+		}
+		slog.Info("Active defence service initialized", "honeytoken_paths", cfg.ActiveDefence.HoneytokenPaths, "auto_report", cfg.ActiveDefence.AutoReport)
 		sources = append([]threatcheck.ThreatSource{adService}, sources...)
 	}
 

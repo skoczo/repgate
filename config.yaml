@@ -43,3 +43,10 @@ active_defence:
     - '(txets|chosen|bless|blurbs|akcc|abcd|shelp|cord|dex|bolt|cjfuns|zwso|ioxi-o|insc|classwithtostring|goods|lufix|style)\.php'
     - 'phpinfo'
     - 'laravel\.log$'
+  # Automatically report detected IPs to AbuseIPDB
+  auto_report: false
+  # AbuseIPDB category IDs. Default: 21 (Web App Attack)
+  report_categories:
+    - 21
+  # Custom comment template sent with the report (will append the matched path automatically)
+  report_comment: "Honeytoken tripped"

@@ -32,9 +32,12 @@ type Config struct {
 		} `yaml:"circuit_breaker"`
 	} `yaml:"AbuseIPDB"`
 	ActiveDefence struct {
-		Enabled         bool     `yaml:"enabled"`
-		ExpirationTime  string   `yaml:"expiration_time"`
-		HoneytokenPaths []string `yaml:"honeytoken_paths"`
+		Enabled          bool     `yaml:"enabled"`
+		ExpirationTime   string   `yaml:"expiration_time"`
+		HoneytokenPaths  []string `yaml:"honeytoken_paths"`
+		AutoReport       bool     `yaml:"auto_report"`
+		ReportCategories []int    `yaml:"report_categories"`
+		ReportComment    string   `yaml:"report_comment"`
 	} `yaml:"active_defence"`
 }
 
@@ -46,6 +49,11 @@ func LoadConfig(path string) (*Config, error) {
 
 	var cfg Config
 	cfg.LiveStreamRetentionDays = 0 // disabled by default
+	// Default ActiveDefence config
+	cfg.ActiveDefence.AutoReport = false
+	cfg.ActiveDefence.ReportCategories = []int{21} // Web App Attack
+	cfg.ActiveDefence.ReportComment = "Honeytoken tripped"
+
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}

@@ -3,9 +3,12 @@ package activedefence
 import (
 	"context"
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/model"
 )
 
@@ -141,5 +144,47 @@ func TestReportThreat(t *testing.T) {
 	}
 	if cacheRec.IP != ip || cacheRec.Status != "threat" || cacheRec.Score != 100 || cacheRec.Source != "ActiveDefence" {
 		t.Errorf("invalid record saved to cache: %+v", cacheRec)
+	}
+}
+
+func TestReportThreat_AutoReport(t *testing.T) {
+	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
+	cache := &mockCache{records: make(map[string]model.IPRecord)}
+
+	svc, err := NewService(db, []Cache{cache}, "permanent", []string{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	// Setup a mock server for AbuseIPDB
+	reported := make(chan bool, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			reported <- true
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Initialize the singleton client pointing to the test server
+	client := abuseipdb.NewAbuseIPDBRestClient("test-key")
+	client.AbuseIPDBRestReportUrl = server.URL
+	abuseipdb.SetClient(client)
+
+	// Enable auto report
+	svc.SetAutoReport(true, []int{21}, "test-comment")
+
+	ip := "1.2.3.4"
+	err = svc.ReportThreat(context.Background(), ip, "/.env")
+	if err != nil {
+		t.Fatalf("unexpected error reporting threat: %v", err)
+	}
+
+	// Since reporting is done in a goroutine, wait for it
+	select {
+	case <-reported:
+		// success
+	case <-time.After(1 * time.Second):
+		t.Error("timeout waiting for AbuseIPDB report call")
 	}
 }

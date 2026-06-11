@@ -53,7 +53,7 @@ func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
 			defer server.Close()
 
 			client := NewAbuseIPDBRestClient("test-key")
-			client.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s&maxAgeInDays=90"
+			client.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s&maxAgeInDays=90"
 
 			score, err := client.CheckIP(context.Background(), "127.0.0.1")
 
@@ -71,7 +71,7 @@ func TestAbuseIPDBRestClient_CheckIP(t *testing.T) {
 func TestAbuseIPDBRestClient_Errors(t *testing.T) {
 	// 1. url.Parse error
 	client := NewAbuseIPDBRestClient("test-key")
-	client.AbuseIPDBRestUrl = "%%invalid-url"
+	client.AbuseIPDBRestCheckUrl = "%%invalid-url"
 	_, err := client.CheckIP(context.Background(), "127.0.0.1")
 	if err == nil {
 		t.Error("expected error with invalid URL")
@@ -79,7 +79,7 @@ func TestAbuseIPDBRestClient_Errors(t *testing.T) {
 
 	// 2. HTTPClient.Do error
 	client2 := NewAbuseIPDBRestClient("test-key")
-	client2.AbuseIPDBRestUrl = "http://127.0.0.1:9999/check?ip=%s"
+	client2.AbuseIPDBRestCheckUrl = "http://127.0.0.1:9999/check?ip=%s"
 	_, err = client2.CheckIP(context.Background(), "127.0.0.1")
 	if err == nil {
 		t.Error("expected error with connection refused")
@@ -94,7 +94,7 @@ func TestAbuseIPDBRestClient_Errors(t *testing.T) {
 	defer server.Close()
 
 	client3 := NewAbuseIPDBRestClient("test-key")
-	client3.AbuseIPDBRestUrl = server.URL + "?ipAddress=%s"
+	client3.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

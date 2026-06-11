@@ -115,6 +115,10 @@ active_defence:
     - '\.git/'
     - 'wp-login\.php'
     - 'phpinfo'
+  auto_report: false                      # Automatically report detected IPs to AbuseIPDB
+  report_categories:                      # AbuseIPDB category IDs (default: 21 - Web App Attack)
+    - 21
+  report_comment: "Honeytoken tripped"   # Custom comment prefix sent with the report
 ```
 
 ### 3. Start Repgate

@@ -21,6 +21,7 @@ It is specifically optimized for environments behind **Cloudflare** or **Nginx**
 - 🔌 **Seamless Integration**: Designed to work perfectly with Nginx's `auth_request` module.
 - 🛡️ **Resilient Architecture**: Built-in **Circuit Breaker** and configurable **Fail-Open/Fail-Closed** modes.
 - 📊 **Observability**: Native **Prometheus** metrics and structured logging.
+- 🛡️ **Active Defence**: Define custom honeytoken paths (e.g. `.env`, `.git`) to auto-block attackers, with optional background reporting to AbuseIPDB.
 - 🐳 **Docker Ready**: Easy to deploy via Docker and Docker Compose.
 - 🛠️ **Dev Friendly**: Full Dev Container support for VS Code.
 
@@ -75,6 +76,17 @@ AbuseIPDB:
     max_retries: 3
     cool_down_period: 30s
     open_on_error: true
+
+active_defence:
+  enabled: true
+  expiration_time: "permanent" # Auto-block attackers permanently
+  honeytoken_paths:
+    - '\.env'
+    - '\.git/'
+  auto_report: false # Automatically report detected IPs to AbuseIPDB
+  report_categories:
+    - 21 # Web App Attack
+  report_comment: "Honeytoken tripped"
 ```
 
 ### 4. Running
