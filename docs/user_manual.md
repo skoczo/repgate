@@ -313,6 +313,19 @@ location = /robot.txt {
 
 Once Nginx and Repgate are restarted, incoming requests will begin appearing in the Repgate live feed.
 
+### 🖥️ Monitoring via the Web GUI Dashboard
+
+Repgate features an embedded, real-time administrative Web GUI dashboard. You can access it by navigating to your Repgate service root (e.g., `http://localhost:8080/` in a default setup) in your web browser.
+
+The Web GUI provides:
+- **📊 Dashboard**: Displays service uptime, status, and visual progress bars showing memory (L1) and database (L2) cache utilization.
+- **⚡ Live Feed**: A real-time, streaming log of requests processed by Repgate, allowing you to quickly verify that incoming requests are correctly routed and allowed or blocked.
+- **🗄️ Database**: A searchable, paginated grid showing all currently cached IP reputation records stored in the SQLite database.
+
+<p align="center">
+  <img src="repgate_dashboard.png" alt="Repgate Web GUI Dashboard" width="800" />
+</p>
+
 ### Correct Behavior (Headers Properly Configured)
 If the headers are forwarded correctly, the Repgate logs/live feed will display the actual domain and requested path:
 

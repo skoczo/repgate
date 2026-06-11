@@ -14,6 +14,10 @@
 
 It is specifically optimized for environments behind **Cloudflare** or **Nginx**, where client source IPs are passed in headers.
 
+<p align="center">
+  <img src="docs/repgate_dashboard.png" alt="Repgate Web GUI Dashboard" width="800" />
+</p>
+
 ## ✨ Key Features
 
 - ⚡ **High Performance**: Written in Go with [Chi](https://github.com/go-chi/chi) for minimal overhead.
@@ -21,6 +25,7 @@ It is specifically optimized for environments behind **Cloudflare** or **Nginx**
 - 🔌 **Seamless Integration**: Designed to work perfectly with Nginx's `auth_request` module.
 - 🛡️ **Resilient Architecture**: Built-in **Circuit Breaker** and configurable **Fail-Open/Fail-Closed** modes.
 - 📊 **Observability**: Native **Prometheus** metrics and structured logging.
+- 🖥️ **Embedded Web GUI**: Real-time admin dashboard built with Svelte to monitor service health, L1/L2 cache capacity, inspect cached IP records, and stream live access/block logs.
 - 🛡️ **Active Defence**: Define custom honeytoken paths (e.g. `.env`, `.git`) to auto-block attackers, with optional background reporting to AbuseIPDB.
 - 🐳 **Docker Ready**: Easy to deploy via Docker and Docker Compose.
 - 🛠️ **Dev Friendly**: Full Dev Container support for VS Code.
