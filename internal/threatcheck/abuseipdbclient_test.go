@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skoczo/repgate/internal/abuseipdb"
 	"github.com/skoczo/repgate/internal/config"
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
@@ -60,8 +61,9 @@ func TestAbuseIPDBClient(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewAbuseIPDBClient(cfg, repo)
-	client.Client.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s"
+	restClient := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
+	restClient.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s"
+	client := NewAbuseIPDBClient(cfg, repo, restClient)
 
 	if client.Name() != "AbuseIPDB" {
 		t.Errorf("expected name AbuseIPDB, got %s", client.Name())
@@ -98,7 +100,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 50}}`)
 	}))
 	defer server2.Close()
-	client.Client.AbuseIPDBRestCheckUrl = server2.URL + "?ipAddress=%s"
+	restClient.AbuseIPDBRestCheckUrl = server2.URL + "?ipAddress=%s"
 
 	res, err = client.Check(context.Background(), CheckContext{IP: "2.2.2.2"})
 	if err != nil {
@@ -151,7 +153,7 @@ func TestAbuseIPDBClient(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer serverErr.Close()
-	client.Client.AbuseIPDBRestCheckUrl = serverErr.URL + "?ipAddress=%s"
+	restClient.AbuseIPDBRestCheckUrl = serverErr.URL + "?ipAddress=%s"
 
 	_, err = client.Check(context.Background(), CheckContext{IP: "4.4.4.4"})
 	if err == nil {
@@ -185,8 +187,9 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 	}))
 	defer errorServer.Close()
 
-	client := NewAbuseIPDBClient(cfg, repo)
-	client.Client.AbuseIPDBRestCheckUrl = errorServer.URL + "?ipAddress=%s"
+	restClient := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
+	restClient.AbuseIPDBRestCheckUrl = errorServer.URL + "?ipAddress=%s"
+	client := NewAbuseIPDBClient(cfg, repo, restClient)
 
 	// Failure 1
 	_, err := client.Check(context.Background(), CheckContext{IP: "10.0.0.1"})
@@ -226,7 +229,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 20}}`)
 	}))
 	defer successServer.Close()
-	client.Client.AbuseIPDBRestCheckUrl = successServer.URL + "?ipAddress=%s"
+	restClient.AbuseIPDBRestCheckUrl = successServer.URL + "?ipAddress=%s"
 
 	// This request should succeed and close the circuit breaker
 	res, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.5"})
@@ -239,7 +242,7 @@ func TestAbuseIPDBClient_CircuitBreaker(t *testing.T) {
 
 	// We can verify that circuit is fully closed by making another request,
 	// even if we switch back to error server, it shouldn't be rejected by circuit breaker immediately
-	client.Client.AbuseIPDBRestCheckUrl = errorServer.URL + "?ipAddress=%s"
+	restClient.AbuseIPDBRestCheckUrl = errorServer.URL + "?ipAddress=%s"
 	client.Config.AbuseIPDB.CircuitBreaker.OpenOnError = false // Reset Fail closed
 	_, err = client.Check(context.Background(), CheckContext{IP: "10.0.0.6"})
 	if err == nil || err.Error() == "circuit breaker open" {
@@ -263,7 +266,7 @@ func TestAbuseIPDBClient_CleanExpiredAndMetrics(t *testing.T) {
 	cfg.AbuseIPDB.ExpirationTime = 1 * time.Hour
 
 	repo := storage.NewIPRepository(db, cfg)
-	client := NewAbuseIPDBClient(cfg, repo)
+	client := NewAbuseIPDBClient(cfg, repo, nil)
 
 	// Test SetMetrics
 	m := metrics.GetMetrics()
@@ -307,7 +310,8 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 	cfg.AbuseIPDB.ExpirationTime = 1 * time.Hour
 
 	repo := storage.NewIPRepository(db, cfg)
-	client := NewAbuseIPDBClient(cfg, repo)
+	restClient := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
+	client := NewAbuseIPDBClient(cfg, repo, restClient)
 
 	m := metrics.GetMetrics()
 	client.SetMetrics(m)
@@ -318,7 +322,7 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 95}}`)
 	}))
 	defer server1.Close()
-	client.Client.AbuseIPDBRestCheckUrl = server1.URL + "?ipAddress=%s"
+	restClient.AbuseIPDBRestCheckUrl = server1.URL + "?ipAddress=%s"
 
 	_, err := client.Check(context.Background(), CheckContext{IP: "9.9.9.9"})
 	if err != nil {
@@ -331,7 +335,7 @@ func TestAbuseIPDBClient_MetricDrift(t *testing.T) {
 		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 20}}`)
 	}))
 	defer server2.Close()
-	client.Client.AbuseIPDBRestCheckUrl = server2.URL + "?ipAddress=%s"
+	restClient.AbuseIPDBRestCheckUrl = server2.URL + "?ipAddress=%s"
 
 	client.IPCache.Remove("9.9.9.9")
 	// Make it look expired in DB
@@ -362,14 +366,9 @@ func TestAbuseIPDBClient_DatabaseErrors(t *testing.T) {
 	cfg.AbuseIPDB.ExpirationTime = 1 * time.Hour
 
 	repo := storage.NewIPRepository(db, cfg)
-	client := NewAbuseIPDBClient(cfg, repo)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, `{"data":{"abuseConfidenceScore": 95}}`)
-	}))
-	defer server.Close()
-	client.Client.AbuseIPDBRestCheckUrl = server.URL + "?ipAddress=%s"
+	restClient := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
+	restClient.AbuseIPDBRestCheckUrl = "http://127.0.0.1:0?ipAddress=%s"
+	client := NewAbuseIPDBClient(cfg, repo, restClient)
 
 	// Close the DB to trigger errors
 	db.Close()
@@ -386,7 +385,7 @@ func TestAbuseIPDBClient_DatabaseErrors(t *testing.T) {
 	defer os.Remove(dbPath2)
 
 	repo2 := storage.NewIPRepository(db2, cfg)
-	client2 := NewAbuseIPDBClient(cfg, repo2)
+	client2 := NewAbuseIPDBClient(cfg, repo2, nil)
 	client2.IPCache.Set("5.5.5.5", model.IPRecord{
 		IP:        "5.5.5.5",
 		Status:    "threat",

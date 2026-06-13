@@ -7,18 +7,22 @@ import (
 	"time"
 
 	"github.com/skoczo/repgate/internal/model"
-	"github.com/skoczo/repgate/internal/storage"
 )
 
+type EventRepository interface {
+	Insert(ctx context.Context, e *model.Event) error
+	GetEvents(ctx context.Context, beforeID int64, limit int, action string) ([]model.Event, error)
+}
+
 type Service struct {
-	eventRepo     *storage.EventRepository
+	eventRepo     EventRepository
 	eventChan     chan model.Event
 	subscribers   map[chan model.Event]struct{}
 	subMu         sync.Mutex
 	retentionDays int
 }
 
-func NewService(eventRepo *storage.EventRepository, retentionDays int) *Service {
+func NewService(eventRepo EventRepository, retentionDays int) *Service {
 	s := &Service{
 		eventRepo:     eventRepo,
 		eventChan:     make(chan model.Event, 10000),

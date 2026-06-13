@@ -3,8 +3,7 @@ package activedefence
 import (
 	"context"
 	"database/sql"
-	"net/http"
-	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +37,25 @@ type mockCache struct {
 
 func (m *mockCache) Set(ip string, record model.IPRecord) {
 	m.records[ip] = record
+}
+
+type mockAbuseIPDBClient struct {
+	checkIPFunc  func(ctx context.Context, ip string) (int, error)
+	reportIPFunc func(ctx context.Context, ip string, categories []int, comment string) error
+}
+
+func (m *mockAbuseIPDBClient) CheckIP(ctx context.Context, ip string) (int, error) {
+	if m.checkIPFunc != nil {
+		return m.checkIPFunc(ctx, ip)
+	}
+	return 0, nil
+}
+
+func (m *mockAbuseIPDBClient) ReportIP(ctx context.Context, ip string, categories []int, comment string) error {
+	if m.reportIPFunc != nil {
+		return m.reportIPFunc(ctx, ip, categories, comment)
+	}
+	return nil
 }
 
 func TestParseExpirationTime(t *testing.T) {
@@ -82,7 +100,7 @@ func TestIsHoneytoken(t *testing.T) {
 		"(credentials|service-account)\\.json$",
 	}
 
-	svc, err := NewService(&mockDatabase{}, nil, "24h", patterns)
+	svc, err := NewService(&mockDatabase{}, nil, nil, "24h", patterns)
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -114,7 +132,7 @@ func TestReportThreat(t *testing.T) {
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	cache := &mockCache{records: make(map[string]model.IPRecord)}
 
-	svc, err := NewService(db, []Cache{cache}, "permanent", []string{})
+	svc, err := NewService(db, []Cache{cache}, nil, "permanent", []string{})
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -151,25 +169,18 @@ func TestReportThreat_AutoReport(t *testing.T) {
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	cache := &mockCache{records: make(map[string]model.IPRecord)}
 
-	svc, err := NewService(db, []Cache{cache}, "permanent", []string{})
+	reported := make(chan bool, 1)
+	var client abuseipdb.Client = &mockAbuseIPDBClient{
+		reportIPFunc: func(ctx context.Context, ip string, categories []int, comment string) error {
+			reported <- true
+			return nil
+		},
+	}
+
+	svc, err := NewService(db, []Cache{cache}, client, "permanent", []string{})
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
-
-	// Setup a mock server for AbuseIPDB
-	reported := make(chan bool, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			reported <- true
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	// Initialize the singleton client pointing to the test server
-	client := abuseipdb.NewAbuseIPDBRestClient("test-key")
-	client.AbuseIPDBRestReportUrl = server.URL
-	abuseipdb.SetClient(client)
 
 	// Enable auto report
 	svc.SetAutoReport(true, []int{21}, "test-comment")
@@ -187,60 +198,66 @@ func TestReportThreat_AutoReport(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Error("timeout waiting for AbuseIPDB report call")
 	}
+	svc.Wait()
 }
 
 func TestReportThreat_Deduplication(t *testing.T) {
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	cache := &mockCache{records: make(map[string]model.IPRecord)}
 
-	svc, err := NewService(db, []Cache{cache}, "permanent", []string{})
+	var mu sync.Mutex
+	var reportCount int
+	reportedChan := make(chan bool, 5)
+
+	var client abuseipdb.Client = &mockAbuseIPDBClient{
+		reportIPFunc: func(ctx context.Context, ip string, categories []int, comment string) error {
+			mu.Lock()
+			reportCount++
+			mu.Unlock()
+			reportedChan <- true
+			return nil
+		},
+	}
+
+	svc, err := NewService(db, []Cache{cache}, client, "permanent", []string{})
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
-
-	var reportCount int
-	reportedChan := make(chan bool, 5)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			reportCount++
-			reportedChan <- true
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	client := abuseipdb.NewAbuseIPDBRestClient("test-key")
-	client.AbuseIPDBRestReportUrl = server.URL
-	abuseipdb.SetClient(client)
 
 	svc.SetAutoReport(true, []int{21}, "test-comment")
 
 	ip := "5.5.5.5"
 
 	// Trigger 5 concurrent reports
+	var testWg sync.WaitGroup
 	for i := 0; i < 5; i++ {
+		testWg.Add(1)
 		go func() {
+			defer testWg.Done()
 			_ = svc.ReportThreat(context.Background(), ip, "/.env")
 		}()
 	}
+	testWg.Wait()
 
-	// Wait for the report to be marked in DB
-	var record *model.IPRecord
-	for start := time.Now(); time.Since(start) < 1*time.Second; {
-		var err error
-		record, err = db.GetRecord(context.Background(), ip)
-		if err == nil && record.Reported {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
+	// Wait for background reporting routine
+	svc.Wait()
+
+	// Retrieve DB record
+	record, err := db.GetRecord(context.Background(), ip)
+	if err != nil {
+		t.Fatalf("failed to retrieve record from DB: %v", err)
 	}
 
 	if record == nil || !record.Reported {
-		t.Fatal("expected DB record to have Reported = true, but it did not update in time")
+		t.Fatal("expected DB record to have Reported = true")
 	}
 
-	if reportCount != 1 {
-		t.Errorf("expected exactly 1 report call, got %d", reportCount)
+	mu.Lock()
+	count := reportCount
+	mu.Unlock()
+
+	if count != 1 {
+		t.Errorf("expected exactly 1 report call, got %d", count)
 	}
 
 	// Verify cache record has Reported = true
@@ -258,10 +275,14 @@ func TestReportThreat_Deduplication(t *testing.T) {
 		t.Fatalf("unexpected error on second ReportThreat: %v", err)
 	}
 
-	// Wait briefly to ensure no extra report was sent
-	time.Sleep(50 * time.Millisecond)
-	if reportCount != 1 {
-		t.Errorf("expected report count to remain 1 after second call, got %d", reportCount)
+	// Wait for any subsequent async calls to finish
+	svc.Wait()
+
+	mu.Lock()
+	count2 := reportCount
+	mu.Unlock()
+
+	if count2 != 1 {
+		t.Errorf("expected report count to remain 1 after second call, got %d", count2)
 	}
 }
-

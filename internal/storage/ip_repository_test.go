@@ -16,9 +16,14 @@ func (r *IPRepository) testCtx() context.Context {
 }
 
 func TestIPRepository(t *testing.T) {
-	err, repo, _ := initialize(t)
+	repo, db := initialize(t)
+	defer db.Close()
 
-	repo.Update(context.Background(), &model.IPRecord{IP: "127.0.0.1", Status: "safe", Score: 0, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
+	_, err := repo.Update(context.Background(), &model.IPRecord{IP: "127.0.0.1", Status: "safe", Score: 0, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
+	if err != nil {
+		t.Fatalf("failed to update record: %v", err)
+	}
+
 	record, err := repo.GetByIp(context.Background(), "127.0.0.1")
 	if err != nil {
 		t.Errorf("failed to get IP record: %v", err)
@@ -30,20 +35,24 @@ func TestIPRepository(t *testing.T) {
 
 // failed to save IP record
 func TestIPRepositorySaveFailed(t *testing.T) {
-	err, repo, db := initialize(t)
-
+	repo, db := initialize(t)
 	db.Close()
+
 	record := &model.IPRecord{IP: "127.0.0.1", Status: "safe", Score: 0, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)}
-	record, err = repo.Update(context.Background(), record)
+	_, err := repo.Update(context.Background(), record)
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
 }
 
 func TestIPRepositoryDelete(t *testing.T) {
-	err, repo, _ := initialize(t)
+	repo, db := initialize(t)
+	defer db.Close()
 
-	repo.Update(context.Background(), &model.IPRecord{IP: "127.0.0.1", Status: "safe", Score: 0, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
+	_, err := repo.Update(context.Background(), &model.IPRecord{IP: "127.0.0.1", Status: "safe", Score: 0, Source: "test", CheckedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour)})
+	if err != nil {
+		t.Fatalf("failed to insert record: %v", err)
+	}
 
 	record, err := repo.GetByIp(context.Background(), "127.0.0.1")
 	if err != nil {
@@ -69,10 +78,11 @@ func TestIPRepositoryDelete(t *testing.T) {
 }
 
 func TestIPRepositoryDeleteExpired(t *testing.T) {
-	err, repo, _ := initialize(t)
+	repo, db := initialize(t)
+	defer db.Close()
 
 	// Insert expired records directly
-	_, err = repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?, ?)`, "127.0.0.1", "safe", 0, "test", time.Now(), time.Now().Add(-1*time.Hour), 0)
+	_, err := repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?, ?)`, "127.0.0.1", "safe", 0, "test", time.Now(), time.Now().Add(-1*time.Hour), 0)
 	if err != nil {
 		t.Fatalf("failed to insert test record: %v", err)
 	}
@@ -103,36 +113,37 @@ func TestIPRepositoryDeleteExpired(t *testing.T) {
 }
 
 func TestIPRepositoryFailToDelete(t *testing.T) {
-	err, repo, db := initialize(t)
-
+	repo, db := initialize(t)
 	db.Close()
-	err = repo.Delete(context.Background(), "127.0.0.1")
+
+	err := repo.Delete(context.Background(), "127.0.0.1")
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
 }
 
 func TestIPRepositoryDeleteExpiredWithNoRecords(t *testing.T) {
-	err, repo, _ := initialize(t)
+	repo, db := initialize(t)
+	defer db.Close()
 
-	err = repo.DeleteExpired(context.Background(), time.Now())
+	err := repo.DeleteExpired(context.Background(), time.Now())
 	if err != nil {
 		t.Errorf("failed to delete expired IP records: %v", err)
 	}
 }
 
 func TestIPRepositoryDeleteExpiredFailed(t *testing.T) {
-	err, repo, db := initialize(t)
-
+	repo, db := initialize(t)
 	db.Close()
-	err = repo.DeleteExpired(context.Background(), time.Now())
+
+	err := repo.DeleteExpired(context.Background(), time.Now())
 	if err == nil {
 		t.Errorf("expected error but got nil")
 	}
 }
 
 func TestIPRepositoryCount(t *testing.T) {
-	_, repo, db := initialize(t)
+	repo, db := initialize(t)
 	defer db.Close()
 
 	// Initial count should be 0
@@ -182,25 +193,26 @@ func TestIPRepositoryCount(t *testing.T) {
 }
 
 func TestIPRepositoryCountFailed(t *testing.T) {
-	_, repo, db := initialize(t)
+	repo, db := initialize(t)
 	db.Close()
+
 	_, err := repo.Count(context.Background())
 	if err == nil {
 		t.Error("expected error from Count() when database is closed, got nil")
 	}
 }
 
-func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
+func initialize(t *testing.T) (*IPRepository, *sql.DB) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "repgate.db")
 	db, err := OpenSQLiteDB(dbPath)
 	if err != nil {
-		t.Errorf("failed to open database: %v", err)
+		t.Fatalf("failed to open database: %v", err)
 	}
 
 	// run migrations
 	if err := RunMigrations(db, "../../db/migrations"); err != nil {
-		t.Errorf("failed to run migrations: %v", err)
+		t.Fatalf("failed to run migrations: %v", err)
 	}
 	cfg := &config.Config{}
 	cfg.AbuseIPDB.Enabled = true
@@ -208,11 +220,11 @@ func initialize(t *testing.T) (error, *IPRepository, *sql.DB) {
 	cfg.AbuseIPDB.ExpirationTime = 24 * time.Hour
 	cfg.AbuseIPDB.ConfidenceScoreThreshold = 50
 	repo := NewIPRepository(db, cfg)
-	return err, repo, db
+	return repo, db
 }
 
 func TestIPRepositoryGetRecord(t *testing.T) {
-	_, repo, db := initialize(t)
+	repo, db := initialize(t)
 	defer db.Close()
 
 	// Insert an expired record
@@ -242,7 +254,7 @@ func TestIPRepositoryGetRecord(t *testing.T) {
 }
 
 func TestIPRepositoryErrors(t *testing.T) {
-	_, repo, db := initialize(t)
+	repo, db := initialize(t)
 	db.Close()
 
 	_, err := repo.GetByIp(context.Background(), "127.0.0.1")
@@ -262,7 +274,7 @@ func TestIPRepositoryErrors(t *testing.T) {
 }
 
 func TestIPRepositoryListRecords(t *testing.T) {
-	_, repo, db := initialize(t)
+	repo, db := initialize(t)
 	defer db.Close()
 
 	// Insert test data

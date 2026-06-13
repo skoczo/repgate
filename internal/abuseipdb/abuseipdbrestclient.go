@@ -17,6 +17,12 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// Client defines the interface for interacting with AbuseIPDB.
+type Client interface {
+	CheckIP(ctx context.Context, ip string) (int, error)
+	ReportIP(ctx context.Context, ip string, categories []int, comment string) error
+}
+
 type AbuseIPDBRestClient struct {
 	APIKey                 string
 	AbuseIPDBRestCheckUrl  string

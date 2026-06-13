@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/skoczo/repgate/internal/abuseipdb"
@@ -32,6 +33,8 @@ type Cache interface {
 type Service struct {
 	db               Database
 	caches           []Cache
+	client           abuseipdb.Client
+	Now              func() time.Time
 	expirationTime   time.Duration
 	isPermanent      bool
 	honeytoken       []*regexp.Regexp
@@ -40,10 +43,11 @@ type Service struct {
 	reportCategories []int
 	reportComment    string
 	reportGroup      singleflight.Group
+	wg               sync.WaitGroup
 }
 
 // NewService instantiates a new active defence service
-func NewService(db Database, caches []Cache, expTimeStr string, honeytokenPaths []string) (*Service, error) {
+func NewService(db Database, caches []Cache, client abuseipdb.Client, expTimeStr string, honeytokenPaths []string) (*Service, error) {
 	expTime, isPermanent, err := parseExpirationTime(expTimeStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse active defence expiration time: %w", err)
@@ -61,6 +65,8 @@ func NewService(db Database, caches []Cache, expTimeStr string, honeytokenPaths 
 	return &Service{
 		db:             db,
 		caches:         caches,
+		client:         client,
+		Now:            time.Now,
 		expirationTime: expTime,
 		isPermanent:    isPermanent,
 		honeytoken:     regexes,
@@ -149,7 +155,7 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 		// Use year 9999 to represent permanent / no expiration
 		expiresAt = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 	} else {
-		expiresAt = time.Now().Add(s.expirationTime)
+		expiresAt = s.Now().Add(s.expirationTime)
 	}
 
 	record := model.IPRecord{
@@ -157,7 +163,7 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 		Status:    "threat",
 		Score:     100, // Max threat confidence score
 		Source:    "ActiveDefence",
-		CheckedAt: time.Now(),
+		CheckedAt: s.Now(),
 		ExpiresAt: expiresAt,
 		Reported:  false,
 	}
@@ -192,7 +198,7 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 
 func (s *Service) reportToAbuseIPDB(path string, ip string) {
 	if s.autoReport {
-		if client := abuseipdb.GetClient(); client != nil {
+		if s.client != nil {
 			categories := s.reportCategories
 			if len(categories) == 0 {
 				categories = []int{21} // Default: Web App Attack
@@ -203,7 +209,9 @@ func (s *Service) reportToAbuseIPDB(path string, ip string) {
 			} else {
 				comment = fmt.Sprintf("%s: %s", comment, path)
 			}
+			s.wg.Add(1)
 			go func() {
+				defer s.wg.Done()
 				_, err, _ := s.reportGroup.Do(ip, func() (any, error) {
 					// Fetch fresh record from DB to ensure it's still not reported
 					record, err := s.db.GetRecord(context.Background(), ip)
@@ -221,7 +229,7 @@ func (s *Service) reportToAbuseIPDB(path string, ip string) {
 					}
 
 					slog.Info("reporting threat IP to AbuseIPDB", "ip", ip, "categories", categories, "comment", comment)
-					if err := client.ReportIP(context.Background(), ip, categories, comment); err != nil {
+					if err := s.client.ReportIP(context.Background(), ip, categories, comment); err != nil {
 						return nil, fmt.Errorf("failed to report threat IP to AbuseIPDB: %w", err)
 					}
 
@@ -266,4 +274,9 @@ func parseExpirationTime(val string) (time.Duration, bool, error) {
 		return time.Duration(hours) * time.Hour, false, nil
 	}
 	return 0, false, fmt.Errorf("invalid expiration time format: %q", val)
+}
+
+// Wait blocks until all background threat reporting tasks have finished
+func (s *Service) Wait() {
+	s.wg.Wait()
 }

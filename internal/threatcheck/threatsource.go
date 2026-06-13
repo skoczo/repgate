@@ -21,6 +21,10 @@ type ThreatSource interface {
 	SetMetrics(m *metrics.Metrics)
 }
 
+type Statable interface {
+	CacheStats() (int, int)
+}
+
 type ThreatCheckResult struct {
 	IP       string
 	IsThreat bool

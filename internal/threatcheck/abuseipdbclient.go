@@ -20,7 +20,7 @@ import (
 type AbuseIPDBThreatSource struct {
 	APIKey  string
 	Repo    *storage.IPRepository
-	Client  *abuseipdb.AbuseIPDBRestClient
+	Client  abuseipdb.Client
 	Config  *config.Config
 	IPCache *cache.IPCache
 
@@ -31,11 +31,7 @@ type AbuseIPDBThreatSource struct {
 }
 
 // initialize ipcache with max size from config
-func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository) *AbuseIPDBThreatSource {
-	client := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
-	if cfg.AbuseIPDB.APIURL != "" {
-		client.AbuseIPDBRestCheckUrl = cfg.AbuseIPDB.APIURL
-	}
+func NewAbuseIPDBClient(cfg *config.Config, repo *storage.IPRepository, client abuseipdb.Client) *AbuseIPDBThreatSource {
 	return &AbuseIPDBThreatSource{
 		APIKey:  cfg.AbuseIPDB.APIKey,
 		Repo:    repo,
@@ -236,4 +232,11 @@ func (c *AbuseIPDBThreatSource) isThreat(score int) bool {
 
 func (c *AbuseIPDBThreatSource) SetMetrics(m *metrics.Metrics) {
 	c.metrics = m
+}
+
+func (c *AbuseIPDBThreatSource) CacheStats() (int, int) {
+	if c.IPCache != nil {
+		return c.IPCache.NumOfEntries(), c.IPCache.Size()
+	}
+	return 0, 0
 }

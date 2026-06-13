@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -10,9 +11,15 @@ import (
 	"github.com/skoczo/repgate/internal/activedefence"
 	"github.com/skoczo/repgate/internal/event"
 	"github.com/skoczo/repgate/internal/metrics"
-	"github.com/skoczo/repgate/internal/storage"
+	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/threatcheck"
 )
+
+type IPRepository interface {
+	ListRecords(ctx context.Context, limit, offset int, search, status, sortBy, sortOrder string) ([]model.IPRecord, int, error)
+	Count(ctx context.Context) (int, error)
+	ThreatCount(ctx context.Context) (int, error)
+}
 
 type Handler struct {
 	ThreatSources  []threatcheck.ThreatSource
@@ -27,10 +34,10 @@ type Handler struct {
 	CachedL2Threat int
 
 	EventService *event.Service
-	IPRepo       *storage.IPRepository
+	IPRepo       IPRepository
 }
 
-func NewHandler(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, eventService *event.Service, ipRepo *storage.IPRepository) *Handler {
+func NewHandler(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, eventService *event.Service, ipRepo IPRepository) *Handler {
 	return &Handler{
 		ThreatSources:  threatSources,
 		AdService:      adService,

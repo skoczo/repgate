@@ -155,7 +155,7 @@ func TestHandler_honeytokenDetection(t *testing.T) {
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	cache := &mockCache{records: make(map[string]model.IPRecord)}
 
-	adService, err := activedefence.NewService(db, []activedefence.Cache{cache}, "permanent", []string{"\\.env"})
+	adService, err := activedefence.NewService(db, []activedefence.Cache{cache}, nil, "permanent", []string{"\\.env"})
 	if err != nil {
 		t.Fatalf("failed to create adService: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestHandler_reportThreatHandler(t *testing.T) {
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	cache := &mockCache{records: make(map[string]model.IPRecord)}
 
-	adService, err := activedefence.NewService(db, []activedefence.Cache{cache}, "permanent", []string{})
+	adService, err := activedefence.NewService(db, []activedefence.Cache{cache}, nil, "permanent", []string{})
 	if err != nil {
 		t.Fatalf("failed to create adService: %v", err)
 	}
@@ -454,7 +454,7 @@ func (e *errorDatabase) GetRecord(ctx context.Context, ip string) (*model.IPReco
 
 func TestHandler_checkHandler_AD_Error(t *testing.T) {
 	db := &errorDatabase{}
-	adService, err := activedefence.NewService(db, nil, "24h", []string{"\\.env"})
+	adService, err := activedefence.NewService(db, nil, nil, "24h", []string{"\\.env"})
 	if err != nil {
 		t.Fatalf("failed to create adService: %v", err)
 	}
@@ -503,7 +503,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 	}
 
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
-	adService, _ := activedefence.NewService(db, nil, "24h", []string{})
+	adService, _ := activedefence.NewService(db, nil, nil, "24h", []string{})
 	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 
 	reqRemote := httptest.NewRequest("POST", "/report-threat", nil)
@@ -523,7 +523,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 	}
 
 	dbError := &errorDatabase{}
-	adServiceErr, _ := activedefence.NewService(dbError, nil, "24h", []string{})
+	adServiceErr, _ := activedefence.NewService(dbError, nil, nil, "24h", []string{})
 	routerErr := NewRouter([]threatcheck.ThreatSource{adServiceErr}, adServiceErr, false, false, 5*time.Second, event.NewService(nil, 7), nil)
 	reqErr := httptest.NewRequest("POST", "/report-threat", nil)
 	reqErr.Header.Set("X-Client-IP", "1.1.1.1")

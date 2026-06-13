@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 )
@@ -12,8 +13,9 @@ import (
 func OpenSQLiteDB(dbPath string) (*sql.DB, error) {
 	// create empty file and all parent directories if it does not exist
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		if err := os.MkdirAll("data", 0755); err != nil {
-			return nil, fmt.Errorf("failed to create data directory: %w", err)
+		dbDir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create database directory: %w", err)
 		}
 		file, err := os.Create(dbPath)
 		if err != nil {

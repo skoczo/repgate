@@ -119,28 +119,30 @@ func initializeMetrics(ipRepo *storage.IPRepository) {
 }
 
 func buildThreatSources(cfg *config.Config, repo *storage.IPRepository) ([]threatcheck.ThreatSource, *activedefence.Service) {
+	var client abuseipdb.Client
 	if cfg.AbuseIPDB.APIKey != "" {
-		client := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
+		restClient := abuseipdb.InitClient(cfg.AbuseIPDB.APIKey)
 		if cfg.AbuseIPDB.APIURL != "" {
-			client.AbuseIPDBRestCheckUrl = cfg.AbuseIPDB.APIURL
+			restClient.AbuseIPDBRestCheckUrl = cfg.AbuseIPDB.APIURL
 		}
+		client = restClient
 	}
 
 	var sources []threatcheck.ThreatSource
 	if cfg.AbuseIPDB.Enabled {
-		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo))
+		sources = append(sources, threatcheck.NewAbuseIPDBClient(cfg, repo, client))
 	}
 
 	var adService *activedefence.Service
 	if cfg.ActiveDefence.Enabled {
 		var caches []activedefence.Cache
 		for _, source := range sources {
-			if client, ok := source.(*threatcheck.AbuseIPDBThreatSource); ok {
-				caches = append(caches, client.IPCache)
+			if clientSrc, ok := source.(*threatcheck.AbuseIPDBThreatSource); ok {
+				caches = append(caches, clientSrc.IPCache)
 			}
 		}
 		var err error
-		adService, err = activedefence.NewService(repo, caches, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
+		adService, err = activedefence.NewService(repo, caches, client, cfg.ActiveDefence.ExpirationTime, cfg.ActiveDefence.HoneytokenPaths)
 		if err != nil {
 			slog.Error("Failed to initialize active defence service", "error", err)
 			os.Exit(1)
