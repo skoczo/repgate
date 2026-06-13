@@ -26,6 +26,7 @@ export interface IPRecord {
   source: string;
   checked_at: string;
   expires_at: string;
+  reported: boolean;
 }
 
 export interface DbRecordsResponse {

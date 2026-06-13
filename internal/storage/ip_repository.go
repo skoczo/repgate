@@ -127,6 +127,7 @@ func (r *IPRepository) ListRecords(ctx context.Context, limit, offset int, searc
 		"status":     "status",
 		"score":      "score",
 		"source":     "source",
+		"reported":   "reported",
 		"checked_at": "checked_at",
 		"expires_at": "expires_at",
 	}

@@ -211,6 +211,9 @@
               <th onclick={() => handleDbSort('source')} class="sortable">
                 Source {dbSortBy === 'source' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
               </th>
+              <th onclick={() => handleDbSort('reported')} class="sortable">
+                Reported {dbSortBy === 'reported' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
+              </th>
               <th onclick={() => handleDbSort('checked_at')} class="sortable">
                 Last Checked {dbSortBy === 'checked_at' ? (dbSortOrder === 'asc' ? '▲' : '▼') : ''}
               </th>
@@ -232,6 +235,13 @@
                 <td class="font-mono">{record.score}%</td>
                 <td>
                   <SourcePill source={record.source} />
+                </td>
+                <td>
+                  {#if record.reported}
+                    <Badge type="error" text="Yes" />
+                  {:else}
+                    <Badge type="success" text="No" />
+                  {/if}
                 </td>
                 <td class="text-sm text-secondary">{formatTime(record.checked_at)}</td>
                 <td>

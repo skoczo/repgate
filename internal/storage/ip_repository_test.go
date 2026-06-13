@@ -277,12 +277,11 @@ func TestIPRepositoryListRecords(t *testing.T) {
 	repo, db := initialize(t)
 	defer db.Close()
 
-	// Insert test data
 	now := time.Now()
 	records := []model.IPRecord{
-		{IP: "192.168.1.1", Status: "safe", Score: 5, Source: "local", CheckedAt: now, ExpiresAt: now.Add(1 * time.Hour)},
-		{IP: "192.168.1.2", Status: "threat", Score: 85, Source: "abuseipdb", CheckedAt: now, ExpiresAt: now.Add(2 * time.Hour)},
-		{IP: "10.0.0.1", Status: "threat", Score: 95, Source: "abuseipdb", CheckedAt: now, ExpiresAt: now.Add(3 * time.Hour)},
+		{IP: "192.168.1.1", Status: "safe", Score: 5, Source: "local", CheckedAt: now, ExpiresAt: now.Add(1 * time.Hour), Reported: false},
+		{IP: "192.168.1.2", Status: "threat", Score: 85, Source: "abuseipdb", CheckedAt: now, ExpiresAt: now.Add(2 * time.Hour), Reported: true},
+		{IP: "10.0.0.1", Status: "threat", Score: 95, Source: "abuseipdb", CheckedAt: now, ExpiresAt: now.Add(3 * time.Hour), Reported: false},
 	}
 
 	for _, rec := range records {
@@ -349,5 +348,17 @@ func TestIPRepositoryListRecords(t *testing.T) {
 	}
 	if res[0].IP != "10.0.0.1" || res[1].IP != "192.168.1.2" {
 		t.Errorf("incorrect status filter results")
+	}
+
+	// Test case 5: Sort by Reported status
+	res, total, err = repo.ListRecords(context.Background(), 10, 0, "", "", "reported", "DESC")
+	if err != nil {
+		t.Fatalf("ListRecords reported sort failed: %v", err)
+	}
+	if total != 3 {
+		t.Errorf("expected 3 records, got %d", total)
+	}
+	if res[0].IP != "192.168.1.2" {
+		t.Errorf("expected 192.168.1.2 to be first when sorting by reported DESC, got %s", res[0].IP)
 	}
 }
