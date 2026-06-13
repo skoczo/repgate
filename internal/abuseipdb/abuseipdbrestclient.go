@@ -139,31 +139,26 @@ func (c *AbuseIPDBRestClient) CheckIP(ctx context.Context, ip string) (int, erro
 */
 
 func (c *AbuseIPDBRestClient) ReportIP(ctx context.Context, ip string, categories []int, comment string) error {
-	u, err := url.Parse(c.AbuseIPDBRestReportUrl)
-	if err != nil {
-		return err
-	}
-
-	q := u.Query()
-	q.Set("ipAddress", ip)
+	data := url.Values{}
+	data.Set("ip", ip)
 
 	categoriesStrings := make([]string, len(categories))
-	for i, c := range categories {
-		categoriesStrings[i] = strconv.Itoa(c)
+	for i, cat := range categories {
+		categoriesStrings[i] = strconv.Itoa(cat)
 	}
-	q.Set("categories", strings.Join(categoriesStrings, ","))
-	q.Set("comment", comment)
-	u.RawQuery = q.Encode()
+	data.Set("categories", strings.Join(categoriesStrings, ","))
+	data.Set("comment", comment)
 
-	ctxHTTP, cancel := context.WithTimeout(context.Background(), c.HTTPClient.Timeout)
+	ctxHTTP, cancel := context.WithTimeout(ctx, c.HTTPClient.Timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctxHTTP, "POST", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctxHTTP, "POST", c.AbuseIPDBRestReportUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Key", c.APIKey)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

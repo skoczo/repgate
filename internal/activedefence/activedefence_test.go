@@ -188,3 +188,80 @@ func TestReportThreat_AutoReport(t *testing.T) {
 		t.Error("timeout waiting for AbuseIPDB report call")
 	}
 }
+
+func TestReportThreat_Deduplication(t *testing.T) {
+	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
+	cache := &mockCache{records: make(map[string]model.IPRecord)}
+
+	svc, err := NewService(db, []Cache{cache}, "permanent", []string{})
+	if err != nil {
+		t.Fatalf("failed to create service: %v", err)
+	}
+
+	var reportCount int
+	reportedChan := make(chan bool, 5)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			reportCount++
+			reportedChan <- true
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := abuseipdb.NewAbuseIPDBRestClient("test-key")
+	client.AbuseIPDBRestReportUrl = server.URL
+	abuseipdb.SetClient(client)
+
+	svc.SetAutoReport(true, []int{21}, "test-comment")
+
+	ip := "5.5.5.5"
+
+	// Trigger 5 concurrent reports
+	for i := 0; i < 5; i++ {
+		go func() {
+			_ = svc.ReportThreat(context.Background(), ip, "/.env")
+		}()
+	}
+
+	// Wait for the report to be marked in DB
+	var record *model.IPRecord
+	for start := time.Now(); time.Since(start) < 1*time.Second; {
+		var err error
+		record, err = db.GetRecord(context.Background(), ip)
+		if err == nil && record.Reported {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if record == nil || !record.Reported {
+		t.Fatal("expected DB record to have Reported = true, but it did not update in time")
+	}
+
+	if reportCount != 1 {
+		t.Errorf("expected exactly 1 report call, got %d", reportCount)
+	}
+
+	// Verify cache record has Reported = true
+	cacheRec, ok := cache.records[ip]
+	if !ok {
+		t.Error("IP not found in cache")
+	}
+	if !cacheRec.Reported {
+		t.Error("expected cache record to have Reported = true")
+	}
+
+	// Trigger a subsequent sequential report for the same IP - should be ignored early
+	err = svc.ReportThreat(context.Background(), ip, "/another-honeytoken")
+	if err != nil {
+		t.Fatalf("unexpected error on second ReportThreat: %v", err)
+	}
+
+	// Wait briefly to ensure no extra report was sent
+	time.Sleep(50 * time.Millisecond)
+	if reportCount != 1 {
+		t.Errorf("expected report count to remain 1 after second call, got %d", reportCount)
+	}
+}
+

@@ -14,6 +14,7 @@ import (
 	"github.com/skoczo/repgate/internal/metrics"
 	"github.com/skoczo/repgate/internal/model"
 	"github.com/skoczo/repgate/internal/threatcheck"
+	"golang.org/x/sync/singleflight"
 )
 
 // Database defines the storage operations needed by active defence
@@ -38,6 +39,7 @@ type Service struct {
 	autoReport       bool
 	reportCategories []int
 	reportComment    string
+	reportGroup      singleflight.Group
 }
 
 // NewService instantiates a new active defence service
@@ -132,6 +134,16 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 		return fmt.Errorf("invalid IP address: %w", err)
 	}
 
+	existingRecord, err := s.db.GetRecord(ctx, ip)
+	if err != nil && err != sql.ErrNoRows {
+		slog.Error("error checking existing database record", "ip", ip, "error", err)
+	}
+
+	if existingRecord != nil && existingRecord.Status == "threat" && existingRecord.Reported {
+		slog.Debug("threat IP already recorded and reported to AbuseIPDB, skipping", "ip", ip)
+		return nil
+	}
+
 	var expiresAt time.Time
 	if s.isPermanent {
 		// Use year 9999 to represent permanent / no expiration
@@ -147,11 +159,7 @@ func (s *Service) ReportThreat(ctx context.Context, ip string, path string) erro
 		Source:    "ActiveDefence",
 		CheckedAt: time.Now(),
 		ExpiresAt: expiresAt,
-	}
-
-	existingRecord, err := s.db.GetRecord(ctx, ip)
-	if err != nil && err != sql.ErrNoRows {
-		slog.Error("error checking existing database record", "ip", ip, "error", err)
+		Reported:  false,
 	}
 
 	_, err = s.db.Update(ctx, &record)
@@ -196,11 +204,44 @@ func (s *Service) reportToAbuseIPDB(path string, ip string) {
 				comment = fmt.Sprintf("%s: %s", comment, path)
 			}
 			go func() {
-				slog.Info("reporting threat IP to AbuseIPDB", "ip", ip, "categories", categories, "comment", comment)
-				if err := client.ReportIP(context.Background(), ip, categories, comment); err != nil {
-					slog.Error("failed to report threat IP to AbuseIPDB", "ip", ip, "error", err)
-				} else {
-					slog.Info("successfully reported threat IP to AbuseIPDB", "ip", ip)
+				_, err, _ := s.reportGroup.Do(ip, func() (any, error) {
+					// Fetch fresh record from DB to ensure it's still not reported
+					record, err := s.db.GetRecord(context.Background(), ip)
+					if err != nil {
+						if err == sql.ErrNoRows {
+							slog.Warn("threat record not found in database when attempting to report", "ip", ip)
+							return nil, nil
+						}
+						return nil, fmt.Errorf("failed to fetch record before report: %w", err)
+					}
+
+					if record.Reported {
+						slog.Debug("IP already marked as reported in database, skipping API report", "ip", ip)
+						return nil, nil
+					}
+
+					slog.Info("reporting threat IP to AbuseIPDB", "ip", ip, "categories", categories, "comment", comment)
+					if err := client.ReportIP(context.Background(), ip, categories, comment); err != nil {
+						return nil, fmt.Errorf("failed to report threat IP to AbuseIPDB: %w", err)
+					}
+
+					// Update DB to mark as reported
+					record.Reported = true
+					if _, err := s.db.Update(context.Background(), record); err != nil {
+						return nil, fmt.Errorf("failed to update record reported status in database: %w", err)
+					}
+
+					// Update memory caches
+					for _, cache := range s.caches {
+						cache.Set(ip, *record)
+					}
+
+					slog.Info("successfully reported threat IP to AbuseIPDB and updated state", "ip", ip)
+					return nil, nil
+				})
+
+				if err != nil {
+					slog.Error("error during active defence threat reporting", "ip", ip, "error", err)
 				}
 			}()
 		} else {

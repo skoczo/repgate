@@ -72,11 +72,11 @@ func TestIPRepositoryDeleteExpired(t *testing.T) {
 	err, repo, _ := initialize(t)
 
 	// Insert expired records directly
-	_, err = repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?)`, "127.0.0.1", "safe", 0, "test", time.Now(), time.Now().Add(-1*time.Hour))
+	_, err = repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?, ?)`, "127.0.0.1", "safe", 0, "test", time.Now(), time.Now().Add(-1*time.Hour), 0)
 	if err != nil {
 		t.Fatalf("failed to insert test record: %v", err)
 	}
-	_, err = repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?)`, "127.0.0.2", "safe", 0, "test", time.Now(), time.Now().Add(-1*time.Hour))
+	_, err = repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?, ?)`, "127.0.0.2", "safe", 0, "test", time.Now(), time.Now().Add(-1*time.Hour), 0)
 	if err != nil {
 		t.Fatalf("failed to insert test record: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestIPRepositoryGetRecord(t *testing.T) {
 
 	// Insert an expired record
 	expiredAt := time.Now().Add(-1 * time.Hour)
-	_, err := repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?)`, "10.0.0.1", "threat", 95, "test", time.Now(), expiredAt)
+	_, err := repo.db.Exec(`INSERT INTO ip_records VALUES (?, ?, ?, ?, ?, ?, ?)`, "10.0.0.1", "threat", 95, "test", time.Now(), expiredAt, 0)
 	if err != nil {
 		t.Fatalf("failed to insert test record: %v", err)
 	}

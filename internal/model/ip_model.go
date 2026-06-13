@@ -9,4 +9,5 @@ type IPRecord struct {
 	Source    string    `json:"source"`
 	CheckedAt time.Time `json:"checked_at"`
 	ExpiresAt time.Time `json:"expires_at"`
+	Reported  bool      `json:"reported"`
 }

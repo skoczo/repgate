@@ -23,11 +23,11 @@ func NewIPRepository(db *sql.DB, cfg *config.Config) *IPRepository {
 }
 
 func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord, error) {
-	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ? and expires_at > ?`
+	query := `SELECT ip, status, score, source, checked_at, expires_at, reported FROM ip_records WHERE ip = ? and expires_at > ?`
 	row := r.db.QueryRowContext(ctx, query, ip, r.Now())
 
 	var record model.IPRecord
-	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
+	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt, &record.Reported); err != nil {
 		// if error is no rows, return nil without error
 		if err == sql.ErrNoRows {
 			return nil, err
@@ -38,11 +38,11 @@ func (r *IPRepository) GetByIp(ctx context.Context, ip string) (*model.IPRecord,
 }
 
 func (r *IPRepository) GetRecord(ctx context.Context, ip string) (*model.IPRecord, error) {
-	query := `SELECT ip, status, score, source, checked_at, expires_at FROM ip_records WHERE ip = ?`
+	query := `SELECT ip, status, score, source, checked_at, expires_at, reported FROM ip_records WHERE ip = ?`
 	row := r.db.QueryRowContext(ctx, query, ip)
 
 	var record model.IPRecord
-	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
+	if err := row.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt, &record.Reported); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, err
 		}
@@ -54,14 +54,15 @@ func (r *IPRepository) GetRecord(ctx context.Context, ip string) (*model.IPRecor
 // update method should be used for saving new records and updating existing records
 func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) (*model.IPRecord, error) {
 	query := `
-	INSERT INTO ip_records
-	VALUES (?, ?, ?, ?, ?, ?)
+	INSERT INTO ip_records (ip, status, score, source, checked_at, expires_at, reported)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(ip) DO UPDATE SET
 		status=excluded.status,
 		score=excluded.score,
 		source=excluded.source,
 		checked_at=excluded.checked_at,
-		expires_at=excluded.expires_at
+		expires_at=excluded.expires_at,
+		reported=excluded.reported
 	`
 	checkedAt := record.CheckedAt
 	if checkedAt.IsZero() {
@@ -72,7 +73,7 @@ func (r *IPRepository) Update(ctx context.Context, record *model.IPRecord) (*mod
 		expiresAt = r.Now().Add(r.expirationTime)
 	}
 
-	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, checkedAt, expiresAt)
+	_, err := r.db.ExecContext(ctx, query, record.IP, record.Status, record.Score, record.Source, checkedAt, expiresAt, record.Reported)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save IP record: %w", err)
 	}
@@ -163,7 +164,7 @@ func (r *IPRepository) ListRecords(ctx context.Context, limit, offset int, searc
 		return nil, 0, fmt.Errorf("failed to count IP records: %w", err)
 	}
 
-	query := fmt.Sprintf("SELECT ip, status, score, source, checked_at, expires_at FROM ip_records %s ORDER BY %s %s LIMIT ? OFFSET ?", whereClause, sortCol, orderDir)
+	query := fmt.Sprintf("SELECT ip, status, score, source, checked_at, expires_at, reported FROM ip_records %s ORDER BY %s %s LIMIT ? OFFSET ?", whereClause, sortCol, orderDir)
 	queryArgs := append(args, limit, offset)
 
 	rows, err := r.db.QueryContext(ctx, query, queryArgs...)
@@ -175,7 +176,7 @@ func (r *IPRepository) ListRecords(ctx context.Context, limit, offset int, searc
 	var records []model.IPRecord
 	for rows.Next() {
 		var record model.IPRecord
-		if err := rows.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt); err != nil {
+		if err := rows.Scan(&record.IP, &record.Status, &record.Score, &record.Source, &record.CheckedAt, &record.ExpiresAt, &record.Reported); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan IP record: %w", err)
 		}
 		records = append(records, record)
