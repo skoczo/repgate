@@ -3,7 +3,7 @@ module github.com/skoczo/repgate
 go 1.25.0
 
 require (
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.4.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.20.0
