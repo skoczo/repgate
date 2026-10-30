@@ -179,6 +179,108 @@ Repgate writes structured logs using Go's `slog` library. When critical security
 
 ---
 
+# 🛡️ Real-World Case Study: Microsecond Edge Defense with Repgate
+
+Repgate is an ultra-lightweight, high-performance IP reputation gateway designed for reverse proxies (Nginx, Nginx Proxy Manager, Traefik, Caddy). It combines **active honeypots (honeytokens)**, **instant in-memory caching**, and **automated community threat reporting** to stop scanners before they ever touch your backend services.
+
+---
+
+## ⚡ Attack Scenario: Neutralizing an Automated Recon Wave
+
+Below is a breakdown of a real-world reconnaissance attack stopped at the network perimeter by Repgate.
+
+```
+Incoming Request Wave
+        │
+        ▼
+┌──────────────────┐
+│   Nginx / NPM    │ ── (auth_request /check) ──► ┌─────────────────────────┐
+└──────────────────┘                              │     Repgate Gateway     │
+        │                                         └─────────────────────────┘
+        │ [403 Forbidden - Dropped at Edge]                    │
+        ▼                                                      ├─► [Honeytoken Triggered]
+┌──────────────────┐                                           ├─► [Threat In-Memory Cache (+31 µs)]
+│  Upstream App    │ ◄── (Zero Traffic / Protected)            └─► [AbuseIPDB Report (+347 µs)]
+│ (Authentik, etc) │
+└──────────────────┘
+```
+
+---
+
+## ⏱️ Sub-Millisecond Event Timeline
+
+### 1. Honeytoken Tripped (`T + 0.00 ms`)
+An automated fuzzer initiated a dictionary scan against a public authentication portal and queried a designated honeytoken path (`/credentials.json`).
+
+```json
+{
+  "time": "2026-10-30T06:35:08.59913902Z",
+  "level": "WARN",
+  "msg": "Honeytoken tripped! Source IP added to threat database and cache",
+  "ip": "203.0.113.42",
+  "path": "/credentials.json"
+}
+```
+
+### 2. Microsecond Threat Caching (`T + 0.03 ms`)
+Just **31 microseconds** later, Repgate's in-memory state engine flagged the source IP across the entire cluster. Any further request from this IP was instantly sentenced to `403 Forbidden`:
+
+```json
+{
+  "time": "2026-10-30T06:35:08.599170789Z",
+  "level": "WARN",
+  "msg": "Threat IP detected",
+  "ip": "203.0.113.42",
+  "target_host": "auth.example.com",
+  "target_path": "/credentials.json",
+  "alert_id": 1001,
+  "alert_name": "THREAT_DETECTED"
+}
+```
+
+### 3. Automated Community Defense (`T + 0.35 ms`)
+Within **350 microseconds**, Repgate asynchronously dispatched an API report to the global **AbuseIPDB** database under Category 21 (Web App Attack / Credential Probing), shielding not just your lab, but the broader internet community:
+
+```json
+{
+  "time": "2026-10-30T06:35:08.599486643Z",
+  "level": "INFO",
+  "msg": "reporting threat IP to AbuseIPDB",
+  "ip": "203.0.113.42",
+  "categories": [21],
+  "comment": "Honeytoken tripped (detected by Repgate): /credentials.json"
+}
+```
+
+### 4. 400+ Fuzzing Payloads Deflected at the Perimeter
+Immediately following the honeytoken trip, the bot burst over 400 requests across a 3-second window seeking sensitive assets:
+
+- Configuration files: `/.env.production`, `/.env.credentials`, `/terraform.tfstate`
+- Container manifests: `/docker-compose.yml`, `/Dockerfile`, `/compose.yml`
+- Private keys & certificates: `/server.key`, `/key.pem`, `/serviceAccountKey.json`
+- CI/CD secrets: `/.github/workflows/deploy.yml`, `/.gitlab-ci.yml`
+
+**Result:** Every single probe was intercepted and rejected at the reverse proxy layer.
+
+| Metric | Without Repgate | With Repgate |
+| :--- | :--- | :--- |
+| **Backend Requests Reached** | 400+ queries | **0 queries** |
+| **Backend CPU / RAM Impact** | High spike | **Zero impact** |
+| **Application Log Pollution** | Hundreds of 404/500 errors | **Completely clean** |
+| **Mitigation Latency** | Minutes (Fail2ban log polling) | **< 1 millisecond (In-memory)** |
+| **Risk of Credential Leak** | Vulnerable to zero-days | **Completely shielded** |
+
+---
+
+## 🌟 Core Architectural Advantages
+
+- **Sub-Millisecond Overhead:** Built for native Nginx `auth_request` / subrequest validation. Safe requests pass with imperceptible latency.
+- **Deception-Driven Security:** Detects malicious scanners dynamically through honeytokens rather than waiting for static IP blacklists to update.
+- **Upstream Resource Isolation:** Prevents upstream containers (Authentik, Home Assistant, Frigate, Immich, Open-WebUI) from handling malicious traffic.
+- **Autonomous Intelligence:** Bridges local perimeter defense with global telemetry via AbuseIPDB synchronization.
+
+---
+
 ## 🛠️ Development
 
 ### Database & Migrations
