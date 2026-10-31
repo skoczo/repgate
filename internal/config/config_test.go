@@ -2,6 +2,8 @@ package config
 
 import (
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -69,6 +71,20 @@ func TestLoadConfigInvalidYAML(t *testing.T) {
 	_, err := LoadConfig("../../resources/tests/config/invalid.yaml")
 	if err == nil {
 		t.Errorf("expected error but got nil")
+	}
+}
+
+func TestLoadConfigInvalidLocalNetworks(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "invalid_local.yaml")
+	content := []byte("local_networks:\n  - 'invalid-cidr/999'\n")
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	_, err := LoadConfig(filePath)
+	if err == nil {
+		t.Errorf("expected error for invalid local_networks, got nil")
 	}
 }
 
