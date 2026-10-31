@@ -26,6 +26,7 @@ It is specifically optimized for environments behind **Cloudflare** or **Nginx**
 - 🛡️ **Resilient Architecture**: Built-in **Circuit Breaker** and configurable **Fail-Open/Fail-Closed** modes.
 - 📊 **Observability**: Native **Prometheus** metrics and structured logging.
 - 🖥️ **Embedded Web GUI**: Real-time admin dashboard built with Svelte to monitor service health, L1/L2 cache capacity, inspect cached IP records, and stream live access/block logs.
+- 🏠 **Local Networks Whitelisting**: Bypass threat scanning and active defence for trusted subnets (LAN, Docker, VPN) or individual IP addresses.
 - 🛡️ **Active Defence**: Define custom honeytoken paths (e.g. `.env`, `.git`) to auto-block attackers, with optional background reporting to AbuseIPDB.
 - 🐳 **Docker Ready**: Easy to deploy via Docker and Docker Compose.
 - 🛠️ **Dev Friendly**: Full Dev Container support for VS Code.
@@ -65,6 +66,14 @@ Create an `internal-config.yaml` file in the root directory (copying from `confi
 ```yaml
 log_level: info
 fail_open: true # Allow traffic if AbuseIPDB is unreachable
+
+# Exclude local networks or IPs from scanning (supports CIDR notation and single IPs)
+local_networks:
+  - "127.0.0.1/32"
+  - "192.168.0.0/16"
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+  - "::1/128"
 
 server:
   port: ":8080"

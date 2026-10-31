@@ -22,8 +22,15 @@ func (h *Handler) ReportThreatHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if _, err := netip.ParseAddr(ip); err != nil {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
 		h.sendResponse(w, http.StatusBadRequest, map[string]string{"error": "Invalid client IP address"})
+		return
+	}
+
+	if h.IsLocalIP(addr) {
+		slog.Warn("attempted to report local IP as threat, skipping", "ip", ip)
+		h.sendResponse(w, http.StatusOK, map[string]string{"status": "ignored", "message": "Local IP is not reportable"})
 		return
 	}
 

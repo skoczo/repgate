@@ -1,17 +1,22 @@
 package config
 
 import (
+	"fmt"
+	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	LogLevel                string `yaml:"log_level"`
-	FailOpen                bool   `yaml:"fail_open"`
-	LogSafeIPs              bool   `yaml:"log_safe_ips"`
-	LiveStreamRetentionDays int    `yaml:"live_stream_retention_days"`
+	LogLevel                string         `yaml:"log_level"`
+	FailOpen                bool           `yaml:"fail_open"`
+	LogSafeIPs              bool           `yaml:"log_safe_ips"`
+	LiveStreamRetentionDays int            `yaml:"live_stream_retention_days"`
+	LocalNetworks           []string       `yaml:"local_networks"`
+	ParsedLocalNetworks     []netip.Prefix `yaml:"-"`
 	Server                  struct {
 		Port              string        `yaml:"port"`
 		ReadTimeout       time.Duration `yaml:"read_timeout"`
@@ -41,6 +46,32 @@ type Config struct {
 	} `yaml:"active_defence"`
 }
 
+// ParseLocalNetworks parses a slice of CIDR prefixes or single IP addresses into []netip.Prefix.
+// Single IP addresses (without a slash) are converted into /32 (IPv4) or /128 (IPv6) prefixes.
+func ParseLocalNetworks(networks []string) ([]netip.Prefix, error) {
+	var prefixes []netip.Prefix
+	for _, entry := range networks {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			prefix, err := netip.ParsePrefix(entry)
+			if err != nil {
+				return nil, fmt.Errorf("invalid CIDR prefix %q in local_networks: %w", entry, err)
+			}
+			prefixes = append(prefixes, prefix.Masked())
+		} else {
+			addr, err := netip.ParseAddr(entry)
+			if err != nil {
+				return nil, fmt.Errorf("invalid IP address %q in local_networks: %w", entry, err)
+			}
+			prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+		}
+	}
+	return prefixes, nil
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -57,5 +88,13 @@ func LoadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+
+	parsedLocal, err := ParseLocalNetworks(cfg.LocalNetworks)
+	if err != nil {
+		return nil, err
+	}
+	cfg.ParsedLocalNetworks = parsedLocal
+
 	return &cfg, nil
 }
+

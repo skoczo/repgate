@@ -49,9 +49,21 @@ func (h *Handler) CheckHandler(w http.ResponseWriter, r *http.Request) {
 		h.sendResponse(w, http.StatusForbidden, "X-Client-IP header is not set")
 		return
 	}
-	if _, err := netip.ParseAddr(ip); err != nil {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
 		slog.Warn("X-Client-IP header is not a valid IP address", "ip", ip, "alert_id", alerts.ClientIPHeaderInvalid.ID, "alert_name", alerts.ClientIPHeaderInvalid.Name)
 		h.sendResponse(w, http.StatusForbidden, "X-Client-IP header is not a valid IP address")
+		return
+	}
+
+	if h.IsLocalIP(addr) {
+		elapsed := time.Since(start_time)
+		slog.Debug("local network IP detected, skipping threat check", "ip", ip, "elapsed", elapsed.String())
+		if h.LogSafeIPs {
+			slog.Info("Safe IP detected", "ip", ip, "target_host", targetHost, "target_path", targetPath, "local", true)
+		}
+		h.PublishEvent(ip, targetHost, targetPath, "allow", "LocalNetwork")
+		h.sendResponse(w, http.StatusOK, "IP is not a threat")
 		return
 	}
 

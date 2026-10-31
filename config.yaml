@@ -10,6 +10,16 @@ live_stream_retention_days: 7
 # if fail_open is false, the server will block traffic if the threat source is not available
 fail_open: true
 
+# local networks or IP addresses that should not be scanned (e.g. LAN, Docker, VPN)
+# supports both CIDR notation (e.g. 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12) and single IPs (e.g. 192.168.1.22, 127.0.0.1)
+local_networks:
+  - "127.0.0.1/32"
+  - "192.168.0.0/16"
+  - "10.0.0.0/8"
+  - "172.16.0.0/12"
+  - "::1/128"
+
+
 server:
   port: ":8080"
   read_timeout: 5s

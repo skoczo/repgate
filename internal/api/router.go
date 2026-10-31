@@ -25,8 +25,8 @@ const (
 )
 
 // NewRouter configures routes, sets up middlewares, and registers handlers.
-func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, timeout time.Duration, eventService *event.Service, ipRepo handlers.IPRepository) http.Handler {
-	h := handlers.NewHandler(threatSources, adService, failOpen, logSafeIPs, eventService, ipRepo)
+func NewRouter(threatSources []threatcheck.ThreatSource, adService *activedefence.Service, failOpen bool, logSafeIPs bool, timeout time.Duration, eventService *event.Service, ipRepo handlers.IPRepository, localNetworks []string) http.Handler {
+	h := handlers.NewHandler(threatSources, adService, failOpen, logSafeIPs, eventService, ipRepo, localNetworks)
 
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)

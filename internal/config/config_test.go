@@ -1,6 +1,9 @@
 package config
 
 import (
+	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -49,6 +52,12 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.ActiveDefence.ReportComment != "Honeytoken tripped" {
 		t.Errorf("active defence report comment is not 'Honeytoken tripped' but %q", cfg.ActiveDefence.ReportComment)
 	}
+	if len(cfg.LocalNetworks) != 5 {
+		t.Errorf("expected 5 local networks, got %d", len(cfg.LocalNetworks))
+	}
+	if len(cfg.ParsedLocalNetworks) != 5 {
+		t.Errorf("expected 5 parsed local networks, got %d", len(cfg.ParsedLocalNetworks))
+	}
 }
 
 func TestLoadConfigInvalidFile(t *testing.T) {
@@ -64,3 +73,102 @@ func TestLoadConfigInvalidYAML(t *testing.T) {
 		t.Errorf("expected error but got nil")
 	}
 }
+
+func TestLoadConfigInvalidLocalNetworks(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "invalid_local.yaml")
+	content := []byte("local_networks:\n  - 'invalid-cidr/999'\n")
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+
+	_, err := LoadConfig(filePath)
+	if err == nil {
+		t.Errorf("expected error for invalid local_networks, got nil")
+	}
+}
+
+func TestParseLocalNetworks(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []string
+		expectError bool
+		checkIPs    map[string]bool // ip -> should match
+	}{
+		{
+			name: "valid mixed networks and IPs",
+			input: []string{
+				"192.168.0.0/16",
+				"10.0.0.0/8",
+				"172.16.0.0/12",
+				"127.0.0.1",
+				"192.168.1.22",
+				"::1",
+				"fd00::/8",
+				"   ", // empty/whitespace
+			},
+			expectError: false,
+			checkIPs: map[string]bool{
+				"192.168.1.22":       true,
+				"192.168.200.5":      true,
+				"10.10.1.45":         true,
+				"172.30.0.7":         true,
+				"127.0.0.1":          true,
+				"::1":                true,
+				"fd12:3456:789a::1":  true,
+				"8.8.8.8":            false,
+				"1.1.1.1":            false,
+				"172.32.0.1":         false,
+				"2001:4860:4860::88": false,
+			},
+		},
+		{
+			name:        "invalid CIDR",
+			input:       []string{"192.168.1.0/99"},
+			expectError: true,
+		},
+		{
+			name:        "invalid IP address",
+			input:       []string{"999.999.999.999"},
+			expectError: true,
+		},
+		{
+			name:        "invalid string format",
+			input:       []string{"not-an-ip"},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prefixes, err := ParseLocalNetworks(tt.input)
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error for input %v, got nil", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			for ipStr, expected := range tt.checkIPs {
+				addr, parseErr := netip.ParseAddr(ipStr)
+				if parseErr != nil {
+					t.Fatalf("test error parsing IP %s: %v", ipStr, parseErr)
+				}
+				matched := false
+				for _, p := range prefixes {
+					if p.Contains(addr) {
+						matched = true
+						break
+					}
+				}
+				if matched != expected {
+					t.Errorf("IP %s: expected match=%v, got match=%v", ipStr, expected, matched)
+				}
+			}
+		})
+	}
+}
+

@@ -42,6 +42,12 @@
     border-color: rgba(139, 92, 246, 0.15);
   }
 
+  .source-pill.source-localnetwork {
+    background: rgba(16, 185, 129, 0.08);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.15);
+  }
+
   .source-pill.source-abuseipdb-failopen,
   .source-pill.source-system-failopen {
     background: rgba(245, 158, 11, 0.08);
