@@ -108,7 +108,7 @@ func TestHandler_checkHanlder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			router := NewRouter(tt.threatSources, nil, tt.failOpen, false, 5*time.Second, event.NewService(nil, 7), nil)
+			router := NewRouter(tt.threatSources, nil, tt.failOpen, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 			req := httptest.NewRequest("GET", "/check", nil)
 			if tt.name == "invalid X-Client-IP" {
@@ -160,7 +160,7 @@ func TestHandler_honeytokenDetection(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 	// Call check with a honeytoken path
 	req := httptest.NewRequest("GET", "/check", nil)
@@ -193,7 +193,7 @@ func TestHandler_reportThreatHandler(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 	req := httptest.NewRequest("POST", "/report-threat", nil)
 	req.Header.Set("X-Client-IP", "5.6.7.8")
@@ -230,7 +230,7 @@ func TestHandler_eventsAndStreaming(t *testing.T) {
 	}
 
 	eventRepo := storage.NewEventRepository(dbConn)
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil, nil)
 
 	// Trigger a check request that logs an event
 	req := httptest.NewRequest("GET", "/check", nil)
@@ -272,7 +272,7 @@ func TestHandler_eventsAndStreaming(t *testing.T) {
 }
 
 func TestHandler_eventsDisabled(t *testing.T) {
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 0), nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 0), nil, nil)
 
 	// Fetching events should return StatusForbidden
 	reqHist := httptest.NewRequest("GET", "/api/v1/events", nil)
@@ -307,7 +307,7 @@ func TestHandler_eventsFiltering(t *testing.T) {
 	}
 
 	eventRepo := storage.NewEventRepository(dbConn)
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil, nil)
 
 	// Insert test events
 	err = eventRepo.Insert(context.Background(), &model.Event{
@@ -459,7 +459,7 @@ func TestHandler_checkHandler_AD_Error(t *testing.T) {
 		t.Fatalf("failed to create adService: %v", err)
 	}
 
-	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, true, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, true, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 	req := httptest.NewRequest("GET", "/check", nil)
 	req.Header.Set("X-Client-IP", "1.1.1.1")
@@ -473,7 +473,7 @@ func TestHandler_checkHandler_AD_Error(t *testing.T) {
 }
 
 func TestHandler_statusHandler(t *testing.T) {
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/status", nil)
 	rr := httptest.NewRecorder()
@@ -494,7 +494,7 @@ func TestHandler_statusHandler(t *testing.T) {
 }
 
 func TestHandler_reportThreatHandler_Errors(t *testing.T) {
-	routerNoAD := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	routerNoAD := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 	req := httptest.NewRequest("POST", "/report-threat", nil)
 	rr := httptest.NewRecorder()
 	routerNoAD.ServeHTTP(rr, req)
@@ -504,7 +504,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 
 	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
 	adService, _ := activedefence.NewService(db, nil, nil, "24h", []string{})
-	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 	reqRemote := httptest.NewRequest("POST", "/report-threat", nil)
 	reqRemote.RemoteAddr = "invalid-ip-port"
@@ -524,7 +524,7 @@ func TestHandler_reportThreatHandler_Errors(t *testing.T) {
 
 	dbError := &errorDatabase{}
 	adServiceErr, _ := activedefence.NewService(dbError, nil, nil, "24h", []string{})
-	routerErr := NewRouter([]threatcheck.ThreatSource{adServiceErr}, adServiceErr, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	routerErr := NewRouter([]threatcheck.ThreatSource{adServiceErr}, adServiceErr, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 	reqErr := httptest.NewRequest("POST", "/report-threat", nil)
 	reqErr.Header.Set("X-Client-IP", "1.1.1.1")
 	rrErr := httptest.NewRecorder()
@@ -548,7 +548,7 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 	}
 
 	eventRepo := storage.NewEventRepository(dbConn)
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(eventRepo, 7), nil, nil)
 
 	eventRepo.Insert(context.Background(), &model.Event{
 		IP: "1.1.1.1", Action: "allow", Source: "System", Timestamp: time.Now(),
@@ -575,7 +575,7 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 		t.Errorf("expected 200 with before_id, got %d", rrBeforeID.Code)
 	}
 
-	routerNoRepo := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	routerNoRepo := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 	reqNoRepo := httptest.NewRequest("GET", "/api/v1/events", nil)
 	rrNoRepo := httptest.NewRecorder()
 	routerNoRepo.ServeHTTP(rrNoRepo, reqNoRepo)
@@ -594,7 +594,7 @@ func TestHandler_eventsHandler_Params(t *testing.T) {
 
 func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
 	eventService := event.NewService(nil, 7)
-	handler := handlers.NewHandler(nil, nil, false, false, eventService, nil)
+	handler := handlers.NewHandler(nil, nil, false, false, eventService, nil, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -627,7 +627,7 @@ func TestHandler_streamLogsHandler_Streaming(t *testing.T) {
 }
 
 func TestHandler_staticRoutes(t *testing.T) {
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), nil, nil)
 
 	reqIndex := httptest.NewRequest("GET", "/", nil)
 	rrIndex := httptest.NewRecorder()
@@ -658,7 +658,7 @@ func TestHandler_dbRecordsHandler(t *testing.T) {
 	cfg.AbuseIPDB.ExpirationTime = 24 * time.Hour
 	ipRepo := storage.NewIPRepository(dbConn, cfg)
 
-	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), ipRepo)
+	router := NewRouter(nil, nil, false, false, 5*time.Second, event.NewService(nil, 7), ipRepo, nil)
 
 	// Insert test data
 	now := time.Now()
@@ -717,3 +717,178 @@ func TestHandler_dbRecordsHandler(t *testing.T) {
 		t.Fatalf("expected 1 record with status filter, got %d", len(resStatus.Records))
 	}
 }
+
+func TestHandler_CheckHandler_LocalNetworks(t *testing.T) {
+	localNetworks := []string{
+		"192.168.0.0/16",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"127.0.0.1",
+	}
+
+	// Create a mock threat source that flags ALL IPs as threat
+	alwaysThreatSource := &mockThreatSource{
+		name:    "AlwaysThreat",
+		enabled: true,
+		result:  threatcheck.ThreatCheckResult{IsThreat: true, Source: "AlwaysThreat"},
+	}
+
+	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
+	cache := &mockCache{records: make(map[string]model.IPRecord)}
+	adService, err := activedefence.NewService(db, []activedefence.Cache{cache}, nil, "24h", []string{"\\.env"})
+	if err != nil {
+		t.Fatalf("failed to create adService: %v", err)
+	}
+
+	eventService := event.NewService(nil, 7)
+	ch := eventService.Subscribe()
+	defer eventService.Unsubscribe(ch)
+
+	router := NewRouter([]threatcheck.ThreatSource{alwaysThreatSource, adService}, adService, false, true, 5*time.Second, eventService, nil, localNetworks)
+
+	tests := []struct {
+		name           string
+		clientIP       string
+		uri            string
+		expectedStatus int
+		expectBypass   bool
+	}{
+		{
+			name:           "192.168.1.22 in 192.168.0.0/16 is bypassed",
+			clientIP:       "192.168.1.22",
+			uri:            "/some-path",
+			expectedStatus: http.StatusOK,
+			expectBypass:   true,
+		},
+		{
+			name:           "10.10.1.45 in 10.0.0.0/8 is bypassed",
+			clientIP:       "10.10.1.45",
+			uri:            "/api",
+			expectedStatus: http.StatusOK,
+			expectBypass:   true,
+		},
+		{
+			name:           "172.30.0.7 in 172.16.0.0/12 is bypassed",
+			clientIP:       "172.30.0.7",
+			uri:            "/app",
+			expectedStatus: http.StatusOK,
+			expectBypass:   true,
+		},
+		{
+			name:           "127.0.0.1 single IP is bypassed",
+			clientIP:       "127.0.0.1",
+			uri:            "/health",
+			expectedStatus: http.StatusOK,
+			expectBypass:   true,
+		},
+		{
+			name:           "local IP requesting honeytoken path is bypassed from Active Defence",
+			clientIP:       "192.168.1.22",
+			uri:            "/.env",
+			expectedStatus: http.StatusOK,
+			expectBypass:   true,
+		},
+		{
+			name:           "external IP is scanned and blocked by threat source",
+			clientIP:       "203.0.113.1",
+			uri:            "/some-path",
+			expectedStatus: http.StatusForbidden,
+			expectBypass:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/check", nil)
+			req.Header.Set("X-Client-IP", tt.clientIP)
+			req.Header.Set("X-Original-URI", tt.uri)
+			rr := httptest.NewRecorder()
+
+			router.ServeHTTP(rr, req)
+
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d", tt.expectedStatus, rr.Code)
+			}
+
+			if tt.expectBypass {
+				// Verify event published has source "LocalNetwork"
+				select {
+				case ev := <-ch:
+					if ev.IP != tt.clientIP {
+						t.Errorf("expected event IP %s, got %s", tt.clientIP, ev.IP)
+					}
+					if ev.Source != "LocalNetwork" {
+						t.Errorf("expected event Source 'LocalNetwork', got %s", ev.Source)
+					}
+					if ev.Action != "allow" {
+						t.Errorf("expected event Action 'allow', got %s", ev.Action)
+					}
+				case <-time.After(500 * time.Millisecond):
+					t.Error("timeout waiting for event")
+				}
+			}
+		})
+	}
+}
+
+func TestHandler_ReportThreatHandler_LocalNetworks(t *testing.T) {
+	localNetworks := []string{
+		"192.168.0.0/16",
+		"10.0.0.0/8",
+	}
+
+	db := &mockDatabase{records: make(map[string]*model.IPRecord)}
+	cache := &mockCache{records: make(map[string]model.IPRecord)}
+	adService, err := activedefence.NewService(db, []activedefence.Cache{cache}, nil, "24h", []string{})
+	if err != nil {
+		t.Fatalf("failed to create adService: %v", err)
+	}
+
+	router := NewRouter([]threatcheck.ThreatSource{adService}, adService, false, false, 5*time.Second, event.NewService(nil, 7), nil, localNetworks)
+
+	// Attempt to report a local IP as threat
+	reqLocal := httptest.NewRequest("POST", "/report-threat", nil)
+	reqLocal.Header.Set("X-Client-IP", "192.168.1.22")
+	reqLocal.Header.Set("X-Original-URI", "/honeypot")
+	rrLocal := httptest.NewRecorder()
+	router.ServeHTTP(rrLocal, reqLocal)
+
+	if rrLocal.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rrLocal.Code)
+	}
+
+	var resLocal map[string]string
+	if err := json.Unmarshal(rrLocal.Body.Bytes(), &resLocal); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resLocal["status"] != "ignored" {
+		t.Errorf("expected status 'ignored', got %q", resLocal["status"])
+	}
+
+	// Verify local IP was NOT saved in cache/db
+	if _, ok := cache.records["192.168.1.22"]; ok {
+		t.Error("local IP was unexpectedly recorded in cache")
+	}
+
+	// Reporting an external IP should succeed
+	reqExternal := httptest.NewRequest("POST", "/report-threat", nil)
+	reqExternal.Header.Set("X-Client-IP", "203.0.113.50")
+	reqExternal.Header.Set("X-Original-URI", "/honeypot")
+	rrExternal := httptest.NewRecorder()
+	router.ServeHTTP(rrExternal, reqExternal)
+
+	if rrExternal.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rrExternal.Code)
+	}
+	var resExternal map[string]string
+	if err := json.Unmarshal(rrExternal.Body.Bytes(), &resExternal); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resExternal["status"] != "success" {
+		t.Errorf("expected status 'success', got %q", resExternal["status"])
+	}
+	if _, ok := cache.records["203.0.113.50"]; !ok {
+		t.Error("external IP was not recorded in cache")
+	}
+}
+
