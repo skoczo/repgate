@@ -152,6 +152,11 @@ make clean
    - Schema updates must **only** be added as sequential `.sql` files in [`db/migrations/`](file:///workspaces/repgate/db/migrations/) (e.g., `004_new_feature.sql`).
    - `storage.RunMigrations()` tracks applied versions in the `schema_migrations` table automatically.
 
+7. **Protected `main` Branch (Never Commit Directly to `main`):**
+   - The `main` branch is protected and direct pushes are rejected.
+   - **Always create a dedicated feature or fix branch** (e.g., `feature/...` or `fix/...`) for all changes.
+   - Never commit directly to `main`; submit all work via Pull Requests.
+
 ---
 
 ## 6. 🧩 Extending Repgate: Vibe Coding Recipes
@@ -200,6 +205,7 @@ make clean
 ## 8. ✅ Definition of Done (Agent Checklist)
 
 Before submitting or completing a task, verify:
+- [ ] Changes are committed to a dedicated feature/fix branch (NEVER directly to `main`).
 - [ ] `make test` runs and passes completely.
 - [ ] If frontend files were modified, `npm run check --prefix web` passes and `make frontend` builds cleanly.
 - [ ] `go mod tidy` does not produce unexpected diffs.
